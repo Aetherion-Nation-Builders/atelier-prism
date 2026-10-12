@@ -1,8 +1,8 @@
 asset:        ai.storyteller.effectcraft.png
-title:        EffectCraft app icon, Linux hicolor 24x24
-author:       EffectCraft contributors (drawing by the project owner in ArtCraft)
+title:        Atelier Prism app icon, Linux hicolor 24x24
+author:       Atelier Prism contributors (Aetherion Nation)
 source:       original work
 license:      MIT OR Apache-2.0
 license-file: assets/app-icon/LICENSE.txt
-added:        2026-10-02 by EffectCraft contributors (Claude agent, app icon)
-notes:        Rendered from effectcraft.svg with resvg by packaging/icons.sh.
+added:        2026-10-12 by Claude (agent) for King OG (Atelier Prism icon)
+notes:        The hidden sun behind a cut crystal, drawn by hand as SVG for Atelier Prism (three colours: volcanic black, ivory, ochre). Renders made with cairosvg and Pillow; packaging/icons.sh regenerates them. Replaces EffectCraft's unicorn icon.

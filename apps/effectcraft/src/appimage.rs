@@ -40,7 +40,7 @@ pub fn exec_arg(path: &str) -> String {
 /// The hidden desktop entry for the AppImage at `appimage`.
 pub fn entry(appimage: &str) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=EffectCraft\nComment=Motion graphics and visual effects compositor\nExec={} %F\nIcon={APP_ID}\nTerminal=false\nStartupWMClass={APP_ID}\nNoDisplay=true\n{MARKER}\n",
+        "[Desktop Entry]\nType=Application\nName=Atelier Prism\nComment=Motion graphics and visual effects compositor\nExec={} %F\nIcon={APP_ID}\nTerminal=false\nStartupWMClass={APP_ID}\nNoDisplay=true\n{MARKER}\n",
         exec_arg(appimage)
     )
 }

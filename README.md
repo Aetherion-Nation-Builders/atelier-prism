@@ -1,65 +1,33 @@
-<p align="center">
-  <a href="https://getartcraft.com/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/artcraft-logo-white.svg">
-      <img alt="ArtCraft" src="docs/brand/artcraft-logo.svg" width="200">
-    </picture>
-  </a>
-</p>
+# Atelier Prism
 
+**Motion graphics and visual effects for the Nation.** A compositor with layers, keyframes,
+expressions, masks, shapes, text animators, 3D and a deep effect library, exporting to video,
+image sequences and Lottie. A native app written in Rust. Runs on macOS, Windows, Linux and in the
+browser. Offline, no account, no cloud.
 
-<h1 align="center">EffectCraft</h1>
+Prism is one of the Atelier apps, Aetherion Nation's own creative suite. It is built on
+[EffectCraft](https://github.com/storytold/effectcraft) by the ArtCraft team (MIT OR Apache-2.0),
+and keeps pulling their work in: EffectCraft is the engine, Atelier is the house it lives in.
 
-<p align="center">
-  <b>Motion graphics and visual effects; an open-source, clean-room reimplementation of Adobe After Effects, rebuilt in pure Rust.</b>
-</p>
+| What | Where |
+|---|---|
+| Run it | `cargo run -p effectcraft` (desktop) · `apps/effectcraft-web` (browser) · `effectcraft-cli` (headless) |
+| How it is built | `AGENTS.md`, `CLAUDE.md`, `docs/` |
+| The brand layer, and what we change versus upstream | [`docs/brand.md`](docs/brand.md) |
+| Pulling in upstream work | [`docs/upstream.md`](docs/upstream.md) |
 
-<p align="center">
-  A free, open-source compositor in the spirit of After Effects: compositions, layers,
-  keyframes, 306 effects, layer styles, expressions, 3D cameras and lights, and a render queue, native on macOS,
-  Windows and Linux, and in the browser. Young, moving fast, and already usable.
-</p>
+## Names
 
-<p align="center">
-  <img alt="Status: young and moving fast" src="https://img.shields.io/badge/status-young%20and%20moving%20fast-e0368f?style=flat-square">
-  <img alt="Written in Rust" src="https://img.shields.io/badge/rust-1.95%2B-b0206c?style=flat-square&logo=rust&logoColor=white">
-  <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-555?style=flat-square">
-</p>
+The product is **Atelier Prism**. Crates, binaries, command ids and the `.ecproj` project format
+keep their upstream `effectcraft` names on purpose, so that upstream changes merge cleanly and
+projects keep opening; see `docs/brand.md` before renaming anything.
 
-<p align="center">
-  <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
-</p>
+---
 
-<p align="center">
-  <a href="https://getartcraft.com/apps/effectcraft"><b>EffectCraft on getartcraft.com</b></a> ·
-  <a href="https://getartcraft.com/">ArtCraft</a> ·
-  <a href="https://getartcraft.com/apps">All Crafting Apps</a>
-</p>
+## What's in the box
 
-<br>
-
-<p align="center">
-  <img src="docs/images/effectcraft-hero.png" alt="EffectCraft's main window: the animated demo composition in the Composition panel, the Project panel, a Timeline with text, shape and solid layers, and the Properties panel showing the selected text layer's transform, font and paragraph settings" width="100%">
-</p>
-
-> [!NOTE]
-> **ArtCraft is a community of artists from all walks of life.** Digital, generative, music,
-> games &mdash; if you make things, you're one of us. **[Come say hi on Discord](https://discord.gg/artcraft).**
-
-<p align="center">
-  <a href="#what-effectcraft-is">What it is</a> ·
-  <a href="#animate">Animate</a> ·
-  <a href="#effects">Effects</a> ·
-  <a href="#3d">3D</a> ·
-  <a href="#export">Export</a> ·
-  <a href="#built-for-agents">Agents</a> ·
-  <a href="#get-started">Get started</a> ·
-  <a href="#where-it-stands">Status</a> ·
-  <a href="#how-its-made">How it's made</a> ·
-  <a href="#downloads">Downloads</a> ·
-  <a href="#the-crafting-apps">The Crafting Apps</a> ·
-  <a href="#license-and-credits">License</a>
-</p>
+The sections below are EffectCraft's own notes, kept as upstream writes them (they still say
+"EffectCraft"; in Atelier the app is Prism). They are the best description of what the app does.
 
 ## What EffectCraft is
 
@@ -252,127 +220,12 @@ send us right now.
 - **One family.** EffectCraft shares its time model and text engine design with FilmCraft, and
   gets its video and audio codecs from it.
 
-## Downloads
+## License
 
-**New to EffectCraft?** Download it from the [EffectCraft page on getartcraft.com](https://getartcraft.com/apps/effectcraft). That's the easiest way to install it.
+MIT OR Apache-2.0, like EffectCraft. Third-party material is listed in `ATTRIBUTION.md` and
+`NOTICE`. The Atelier and Aetherion names and marks are not covered by the license.
 
-**Want a specific build or format?** On GitHub, the [latest release](https://github.com/storytold/effectcraft/releases/latest) has every build listed below, and [all releases](https://github.com/storytold/effectcraft/releases) has earlier versions and their notes. `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
-
-### Windows
-
-| Build | Installer | Portable |
-|---|---|---|
-| x64 (64-bit Intel/AMD) | `effectcraft-<ver>-windows-x64.msi` | `effectcraft-<ver>-windows-x64-portable.zip` |
-| arm64 (Snapdragon and other ARM PCs) | `effectcraft-<ver>-windows-arm64.msi` | `effectcraft-<ver>-windows-arm64-portable.zip` |
-| x86 (32-bit) | `effectcraft-<ver>-windows-x86.msi` | `effectcraft-<ver>-windows-x86-portable.zip` |
-
-Installers and executables are code-signed. The installer asks where to install EffectCraft
-(Program Files by default), and later versions install into the same folder. To install silently
-into a folder of your choice: `msiexec /i effectcraft-<ver>-windows-x64.msi /qn INSTALLFOLDER="D:\Apps\EffectCraft"`.
-
-### macOS
-
-| Build | File | Notes |
-|---|---|---|
-| App, universal (Apple silicon + Intel) | `effectcraft-<ver>-macos-universal.dmg` | Signed and notarized |
-| Command-line tool, universal | `effectcraft-cli-<ver>-macos-universal.zip` | Signed and notarized |
-
-### Linux
-
-| Format | x86_64 | aarch64 (ARM64) | Notes |
-|---|---|---|---|
-| AppImage | `effectcraft-<ver>-linux-x86_64.AppImage` | `effectcraft-<ver>-linux-aarch64.AppImage` | Runs anywhere; updates itself with [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) (`.zsync` files) |
-| Flatpak | `effectcraft-<ver>-linux-x86_64.flatpak` | `effectcraft-<ver>-linux-aarch64.flatpak` | Sandboxed; `flatpak install --user <file>` |
-| Debian/Ubuntu | `effectcraft-<ver>-linux-x86_64.deb` | `effectcraft-<ver>-linux-aarch64.deb` | |
-| Fedora/RHEL/openSUSE | `effectcraft-<ver>-linux-x86_64.rpm` | `effectcraft-<ver>-linux-aarch64.rpm` | |
-| Tarball | `effectcraft-<ver>-linux-x86_64.tar.gz` | `effectcraft-<ver>-linux-aarch64.tar.gz` | Unpack anywhere |
-
-**File drag-and-drop on Linux:** The current eframe/winit 0.30 native Wayland backend does not
-deliver file-hover or file-drop events. On Hyprland and other native Wayland sessions, use
-**File ▸ Import ▸ File…** (which accepts multiple files), or start EffectCraft via XWayland if
-XWayland is installed and `DISPLAY` is set:
-
-```sh
-env -u WAYLAND_DISPLAY effectcraft
-```
-
-When the backend delivers events (X11/XWayland, Windows and macOS), dropping media anywhere
-in the window imports it, and a drop-target hint appears while hovering. On native Wayland the
-app cannot detect an attempt that generates no event; it shows a startup notice with the
-File ▸ Import fallback instead.
-
-### FreeBSD
-
-| Build | File |
-|---|---|
-| x86_64 | `effectcraft-<ver>-freebsd-x86_64.tar.gz` |
-
-### Web (WebAssembly)
-
-| Build | File | Notes |
-|---|---|---|
-| Static site | `effectcraft-web-<ver>.zip` | Runs in a modern browser; host it on any static server |
-
-## The Crafting Apps
-
-EffectCraft is one of the **Crafting Apps**: free, open-source creative tools from the
-[ArtCraft](https://getartcraft.com/) team, each written from scratch in Rust and each able to
-stand on its own.
-
-| | App | What it's for | Code | Learn more |
-|:-:|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/storytold/photocraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.photocraft.png" alt="" width="32" height="32"> | **PhotoCraft** | Image editing: layers, masks, type and real PSD files | [GitHub](https://github.com/storytold/photocraft) | [Website](https://getartcraft.com/apps/photocraft) |
-| <img src="https://raw.githubusercontent.com/storytold/vectorcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.vectorcraft.png" alt="" width="32" height="32"> | **VectorCraft** | Vector illustration | [GitHub](https://github.com/storytold/vectorcraft) | [Website](https://getartcraft.com/apps/vectorcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/filmcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.filmcraft.png" alt="" width="32" height="32"> | **FilmCraft** | Video editing, color and sound | [GitHub](https://github.com/storytold/filmcraft) | [Website](https://getartcraft.com/apps/filmcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/lightcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.lightcraft.png" alt="" width="32" height="32"> | **LightCraft** | Photo library and raw development | [GitHub](https://github.com/storytold/lightcraft) | [Website](https://getartcraft.com/apps/lightcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/pdfcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.pdfcraft.png" alt="" width="32" height="32"> | **PdfCraft** | Reading, organizing and protecting PDFs | [GitHub](https://github.com/storytold/pdfcraft) | [Website](https://getartcraft.com/apps/pdfcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/effectcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.effectcraft.png" alt="" width="32" height="32"> | **EffectCraft** | **Motion graphics and visual effects · you are here** | [GitHub](https://github.com/storytold/effectcraft) | [Website](https://getartcraft.com/apps/effectcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/designcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.designcraft.png" alt="" width="32" height="32"> | **DesignCraft** | Page layout and publishing | [GitHub](https://github.com/storytold/designcraft) | [Website](https://getartcraft.com/apps/designcraft) |
-
-And [**ArtCraft**](https://getartcraft.com/) itself, our AI image and video studio for artists who want real control.
-
-<br>
-
-<p align="center">
-  <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
-</p>
-
-<h3 align="center">Come make things with us</h3>
-
-<p align="center">
-  Our Discord is where artists of every kind hang out: people who paint, shoot, draw, cut film,
-  set type, and people still figuring out what they like to make. Share what you're working on,
-  ask for help, tell us what's broken, or tell us what you wish these tools could do.
-  Whatever your medium and however long you've been at it, you're welcome here.
-</p>
-
-<p align="center">
-  <a href="https://discord.gg/artcraft"><b>discord.gg/artcraft</b></a> ·
-  <a href="https://getartcraft.com/">getartcraft.com</a> ·
-  <a href="https://getartcraft.com/apps">The Crafting Apps</a> ·
-  <a href="https://getartcraft.com/apps/effectcraft">EffectCraft</a>
-</p>
-
-## License and credits
-
-EffectCraft is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-Copyright (c) 2026 ArtCraft Team and the EffectCraft contributors. Required notices are in [NOTICE](NOTICE).
-
-Bundled fonts, icons, images and other assets keep their own open licenses; each one is listed
-with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md).
-
-The ArtCraft name, wordmark and logos in [`docs/brand/`](docs/brand/) are trademarks of the
-ArtCraft Team and are not covered by this license. They may be used only unmodified, and only as
-part of this repository and EffectCraft, under [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt).
-Forks and modified versions must remove them.
-
-<sub>Adobe, Photoshop, Illustrator, Premiere Pro, Lightroom, Acrobat, After Effects and InDesign are trademarks or registered trademarks of Adobe Inc. in the United States and/or other countries. EffectCraft is an independent, open-source project and is not affiliated with, sponsored by or endorsed by Adobe Inc.; these names are used only to describe the workflows it is compatible with.</sub>
-
-<p align="center">
-  <a href="https://getartcraft.com/"><img alt="ArtCraft" src="docs/brand/artcraft-mark.svg" width="28"></a><br>
-  <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
-</p>
-
-## Star history
-
-[![Star History Chart](https://api.star-history.com/svg?repos=storytold/effectcraft&type=Date&legend=top-left)](https://www.star-history.com/?repos=storytold%2Feffectcraft&type=date&legend=top-left)
+<sub>Adobe and After Effects are trademarks or registered trademarks of Adobe Inc. in the United
+States and/or other countries. Atelier Prism is an independent, open-source project and is not
+affiliated with, sponsored by or endorsed by Adobe Inc.; these names are used only to describe the
+workflows it is compatible with.</sub>

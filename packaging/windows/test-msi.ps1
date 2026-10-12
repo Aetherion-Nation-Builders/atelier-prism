@@ -82,8 +82,8 @@ foreach ($v in '0.0.1', '0.0.2', '0.0.3') {
 
 # Spaces and a non-ASCII letter (written as a char so the script's own encoding doesn't matter).
 $Custom = Join-Path $env:SystemDrive "EffectCraft Test $([char]0x00DC)nicode\My Apps"
-$Default = Join-Path $env:ProgramFiles 'EffectCraft'
-if (Test-Path -LiteralPath $AppPaths) { throw 'EffectCraft is already installed here; run this on a clean machine' }
+$Default = Join-Path $env:ProgramFiles 'Atelier Prism'
+if (Test-Path -LiteralPath $AppPaths) { throw 'Atelier Prism is already installed here; run this on a clean machine' }
 
 Invoke-Msiexec 'install the legacy package to a custom folder' @('/i', "`"$($Msi['0.0.1'])`"", "INSTALLFOLDER=`"$Custom`"")
 Assert-InstalledIn $Custom -NoPathValue
@@ -97,8 +97,8 @@ Invoke-Msiexec 'upgrade again without a folder' @('/i', "`"$($Msi['0.0.3'])`"")
 Assert-InstalledIn $Custom
 # Read single values: Get-ItemProperty throws on some machines' malformed Uninstall entries.
 $arp = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' |
-  ForEach-Object { if ($_.GetValue('DisplayName') -eq 'EffectCraft') { $_.GetValue('DisplayVersion') } })
-if ($arp.Count -ne 1 -or $arp[0] -ne '0.0.3') { throw "expected one EffectCraft 0.0.3 in Apps, found: $($arp -join ', ')" }
+  ForEach-Object { if ($_.GetValue('DisplayName') -eq 'Atelier Prism') { $_.GetValue('DisplayVersion') } })
+if ($arp.Count -ne 1 -or $arp[0] -ne '0.0.3') { throw "expected one Atelier Prism 0.0.3 in Apps, found: $($arp -join ', ')" }
 
 # Repair the way the wizard's Repair button does: damage the CLI in place (a later write time, as a
 # user edit or corruption would have), repair with the wizard's REINSTALLMODE, compare contents.

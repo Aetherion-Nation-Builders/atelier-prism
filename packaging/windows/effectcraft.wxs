@@ -8,27 +8,27 @@
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
-      Name="EffectCraft"
-      Manufacturer="Learning Machines LLC"
+      Name="Atelier Prism"
+      Manufacturer="Aetherion Nation"
       Version="$(var.Version)"
       UpgradeCode="AACA8593-C6ED-40A8-BA6C-CB325D8529F9"
       Scope="perMachine"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="EffectCraft motion graphics and visual effects" Manufacturer="Learning Machines LLC" />
+    <SummaryInformation Description="Atelier Prism motion graphics and visual effects" Manufacturer="Aetherion Nation" />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-        DowngradeErrorMessage="A newer version of EffectCraft is already installed." />
+        DowngradeErrorMessage="A newer version of Atelier Prism is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <!-- The setup wizard (installer-ui.wxs): pick the folder on a fresh install. -->
     <UIRef Id="EffectcraftUI" />
 
     <Icon Id="EffectcraftIcon.ico" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="EffectcraftIcon.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/effectcraft" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/effectcraft" />
-    <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
+    <Property Id="ARPURLINFOABOUT" Value="https://www.aetherionnnation.com/atelier/prism" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://www.aetherionnnation.com/atelier/prism" />
+    <Property Id="ARPHELPLINK" Value="https://www.aetherionnnation.com" />
 
     <!-- An upgrade, repair or silent reinstall goes where the installed copy already is: the App Paths
          "Path" value written below, or for releases before this installer change (no Path value; they
@@ -50,11 +50,11 @@
         After="SetINSTALLFOLDER" Sequence="both" Condition="PREVIOUSEXEFOLDER AND NOT INSTALLFOLDER" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="EffectCraft" />
+      <Directory Id="INSTALLFOLDER" Name="Atelier Prism" />
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
-    <Feature Id="Main" Title="EffectCraft" Level="1">
+    <Feature Id="Main" Title="Atelier Prism" Level="1">
       <ComponentGroupRef Id="EffectcraftFiles" />
     </Feature>
   </Package>
@@ -63,8 +63,8 @@
     <ComponentGroup Id="EffectcraftFiles" Directory="INSTALLFOLDER">
       <Component Id="EffectcraftApp" Guid="BA719860-95FE-4154-B265-47006B8E9083">
         <File Id="EffectcraftExe" Source="$(var.BinDir)\effectcraft.exe" KeyPath="yes">
-          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="EffectCraft"
-              Description="EffectCraft motion graphics and visual effects" WorkingDirectory="INSTALLFOLDER" Advertise="yes"
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Atelier Prism"
+              Description="Atelier Prism motion graphics and visual effects" WorkingDirectory="INSTALLFOLDER" Advertise="yes"
               Icon="EffectcraftIcon.ico" IconIndex="0" />
         </File>
 

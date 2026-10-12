@@ -70,7 +70,7 @@ pub fn project_name(app: &EffectcraftApp) -> String {
 /// The window title: the project's path (or name) and `*` while it has unsaved changes.
 pub fn window_title(app: &EffectcraftApp) -> String {
     let doc = app.session.path.clone().unwrap_or_else(|| project_name(app));
-    format!("EffectCraft - {doc}{}", if app.session.is_dirty() { " *" } else { "" })
+    format!("Atelier Prism - {doc}{}", if app.session.is_dirty() { " *" } else { "" })
 }
 
 enum Answer {
