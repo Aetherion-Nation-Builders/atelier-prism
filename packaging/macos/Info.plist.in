@@ -7,9 +7,9 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>EffectCraft</string>
+  <string>Atelier Prism</string>
   <key>CFBundleName</key>
-  <string>EffectCraft</string>
+  <string>Atelier Prism</string>
   <key>CFBundleExecutable</key>
   <string>EffectCraft</string>
   <key>CFBundleIdentifier</key>
@@ -43,14 +43,14 @@
   <key>NSRequiresAquaSystemAppearance</key>
   <false/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright © the EffectCraft authors. MIT OR Apache-2.0.</string>
+  <string>Copyright © Aetherion Nation and the EffectCraft authors. MIT OR Apache-2.0.</string>
 
   <!-- Projects open from Finder (double-click, Open With, Dock); src/apple_events.rs. -->
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>
       <key>CFBundleTypeName</key>
-      <string>EffectCraft Project</string>
+      <string>Atelier Prism Project</string>
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
       <key>LSHandlerRank</key>
@@ -68,7 +68,7 @@
       <key>UTTypeIdentifier</key>
       <string>ai.storyteller.effectcraft.document</string>
       <key>UTTypeDescription</key>
-      <string>EffectCraft Project</string>
+      <string>Atelier Prism Project</string>
       <key>UTTypeConformsTo</key>
       <array>
         <string>public.data</string>

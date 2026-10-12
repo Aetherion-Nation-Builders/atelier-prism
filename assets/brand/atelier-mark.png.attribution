@@ -1,0 +1,8 @@
+asset:        atelier-mark.png
+title:        Atelier mark (the hidden sun), ochre on transparent
+author:       Aetherion Nation
+source:       original work (made for Atelier: an ochre half disc rising over its horizon bar, drawn as shapes)
+license:      MIT OR Apache-2.0 for the artwork; the Atelier name and mark are not covered by that licence.
+license-file: LICENSE-MIT
+added:        2026-10-12 by Claude (agent) for King OG
+notes:        256x256 PNG. Drawn by crates/ui-egui/src/header.rs (paint_logo) in the Tools bar and the About dialog, replacing the ArtCraft mark.

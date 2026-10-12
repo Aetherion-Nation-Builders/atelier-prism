@@ -95,7 +95,7 @@ fn page_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, page: &Page, cur: &Value
             Item::Setting { key, label, kind, live } => {
                 let v = get(key);
                 let id = format!("settings.{key}");
-                let tip = (!live).then_some("Stored, but not used by EffectCraft yet");
+                let tip = (!live).then_some("Stored, but not used by Atelier Prism yet");
                 let mut resp: Option<egui::Response> = None;
                 match kind {
                     Kind::Bool => {
@@ -216,7 +216,7 @@ fn theme_preview(ui: &mut egui::Ui, kind: ThemeKind, width: f32) {
     painter.rect_filled(rect, 3.0, p.app_bg);
     let bar = Rect::from_min_size(rect.min, vec2(rect.width(), 13.0));
     painter.rect_filled(bar, 0.0, p.header_bg);
-    // The brand mark, the tools (the Selection tool is active) and the Discord pill.
+    // The brand mark, the tools (the Selection tool is active) and the Nation pill.
     painter.rect_filled(Rect::from_min_size(bar.min + vec2(4.0, 3.0), vec2(7.0, 7.0)), 2.0, p.accent);
     for i in 0..7 {
         let c = if i == 0 { p.accent } else { p.icon };
@@ -225,7 +225,7 @@ fn theme_preview(ui: &mut egui::Ui, kind: ThemeKind, width: f32) {
     painter.rect_filled(
         Rect::from_min_max(pos2(bar.right() - 22.0, bar.top() + 3.0), pos2(bar.right() - 4.0, bar.bottom() - 3.0)),
         3.5,
-        egui::Color32::from_rgb(0x58, 0x65, 0xf2),
+        egui::Color32::from_rgb(0x9a, 0x6a, 0x12),
     );
     let gap = 2.0;
     let body = Rect::from_min_max(pos2(rect.left() + gap, bar.bottom() + gap), pos2(rect.right() - gap, rect.bottom() - gap));
@@ -728,7 +728,7 @@ pub fn recovery(app: &mut EffectcraftApp, ctx: &egui::Context, t: &Tokens) {
     };
     let mut choice: Option<&str> = None;
     super::dialogs::modal(ctx, "Recover Project", vec2(560.0, 230.0), t, |ui| {
-        ui.label(tr("EffectCraft didn't quit normally last time."));
+        ui.label(tr("Atelier Prism didn't quit normally last time."));
         ui.add_space(6.0);
         if let Some(p) = &r.project {
             ui.label(tr_args("Project: {}", &[&p]));
