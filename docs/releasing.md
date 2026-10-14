@@ -1,5 +1,14 @@
 # Releasing EffectCraft
 
+> **Atelier Prism, for now:** a release builds the **macOS DMG only**, on GitHub's standard
+> macOS runner, **unsigned** (ad-hoc signed, not notarized) until the Apple signing secrets below
+> are added. The other platforms build again when listed in the repository variable
+> `ATELIER_RELEASE_PLATFORMS` (for example `windows linux freebsd web`). The draft is named
+> `Atelier Prism v<version>`; publish it to make it the release Atelier Gate installs. To cut one
+> without the `release` branch: **Actions › Release › Run workflow** on `main`. An unsigned app
+> downloaded in a browser opens the first time through **System Settings › Privacy & Security ›
+> Open Anyway** (macOS 15). The rest of this page is upstream's guide.
+
 Every push to the `release` branch runs [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 It builds signed installers for macOS and Windows, packages for Linux and FreeBSD, and the web
 build, then creates or updates a

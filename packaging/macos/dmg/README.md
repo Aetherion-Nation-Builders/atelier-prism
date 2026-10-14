@@ -7,13 +7,13 @@ and the layout into the image, so no bitmap is committed. The DMG still builds w
 
 | File | What |
 |---|---|
-| `background.svg` | Source of the background: the app icon (`assets/app-icon/effectcraft.svg`, linked, not copied) cropped as a cover on the EffectCraft colour field (`#e0368f`), Ink and Paper. Its text (Inter, JetBrains Mono) is outlined, so rendering it needs no fonts. `package.sh` renders it with [resvg](https://github.com/linebender/resvg) 0.48.1 at 1x (660 × 400 px) and 2x (1320 × 800 px) and joins both into `.background/background.tiff` (`tiffutil -cathidpicheck`); `release.yml` installs that resvg on the macOS runner. |
-| `dmg-layout.DS_Store` | Finder's view settings for the volume: window size, icon size 128, EffectCraft.app at (326, 205), `Applications` at (574, 205), and the background. Goes to `.DS_Store` in the image; named so it isn't mistaken for (or ignored like) a Finder-generated `.DS_Store`. |
+| `background.svg` | Source of the background, in Atelier's colours: the app icon (`assets/app-icon/effectcraft.svg`, linked, not copied) on a volcanic-black panel (`#141210`), an ochre rule (`#d9a441`) and the ivory field (`#efe6d2`) with "Atelier Prism". Its text (Archivo, Geist Mono) is outlined, so rendering it needs no fonts; `atelier-background.py` writes it. |
+| `dmg-layout.DS_Store` | Finder's view settings for the volume: window size, icon size 128, `Atelier Prism.app` at (326, 205), `Applications` at (574, 205), and the background. Goes to `.DS_Store` in the image; named so it isn't mistaken for (or ignored like) a Finder-generated `.DS_Store`. |
 | `generate.py` | Writes `dmg-layout.DS_Store` from the layout above. |
 
 ## The volume name has no version
 
-The mounted volume is called `EffectCraft`, not `EffectCraft <version>`. The layout points at the background
+The mounted volume is called `Atelier Prism`, not `Atelier Prism <version>`. The layout points at the background
 through an alias that includes the volume name, and Finder resolves it by that name: with a
 versioned name the window keeps its size and icon positions but shows no background (tested).
 The DMG file name (`effectcraft-<version>-macos-<arch>.dmg`) still carries the version.
@@ -42,3 +42,15 @@ The DMG file name (`effectcraft-<version>-macos-<arch>.dmg`) still carries the v
   ran it. The window is 660 × 432 with Finder's 32 pt title bar; the content area is 660 × 400.
 
 This follows VectorCraft's `packaging/macos/dmg/` (storytold/vectorcraft#493).
+
+## Atelier
+
+`background.svg` is written by `atelier-background.py` in Atelier's colours (the app icon on
+volcanic black, an ochre rule, the ivory field with "Atelier Prism"); its text is outlined from Archivo
+and Geist Mono, read from a fonts folder such as atelier-gate's `assets/fonts/`:
+
+```sh
+pip install fonttools
+python3 packaging/macos/dmg/atelier-background.py ../atelier-gate/assets/fonts
+python3 packaging/macos/dmg/generate.py
+```
