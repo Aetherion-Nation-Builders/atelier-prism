@@ -152,7 +152,7 @@ See [docs/agents.md](docs/agents.md) and [docs/control-protocol.md](docs/control
 
 Installers for each version are on the [Releases](https://github.com/storytold/effectcraft/releases)
 page: a universal macOS app; Windows MSIs and portable zips for x64, x86 and ARM64; Linux
-AppImage, Flatpak, deb, rpm and tar.gz for x86_64 and aarch64; a FreeBSD x86_64 tarball; and the
+AppImage, Flatpak, deb, rpm and tar.gz for x86_64 and aarch64, plus a riscv64 tar.gz; a FreeBSD x86_64 tarball; and the
 web build. [Downloads](#downloads) lists every file. The Windows ARM64 build runs natively on
 Windows on ARM, without x64 emulation. CI installs that MSI on Windows 11 ARM64 hardware, checks
 both programs are ARM64 and runs the command-line tool there, but it doesn't open the app's window

@@ -14,8 +14,8 @@ use egui::{Align2, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use super::timeline::TMap;
-use crate::EffectcraftApp;
 use crate::theme::Tokens;
+use crate::{EffectcraftApp, widgets};
 
 type Actions = Vec<(String, serde_json::Value)>;
 
@@ -82,11 +82,19 @@ fn speed_graph(app: &EffectcraftApp, comp: &Comp) -> bool {
 fn shown_props(app: &EffectcraftApp, comp: &Comp) -> Vec<(LayerId, u64)> {
     let st = &app.session.state;
     let numeric = |pr: &Property| !pr.value.components().is_empty() && pr.value.interpolates();
-    if app.ui.timeline.graph_show_selected && !st.selected_props.is_empty() {
-        return st.selected_props.iter().filter(|(l, u)| comp.layer(*l).and_then(|l| l.props.find(*u)).is_some_and(numeric)).copied().collect();
+    // A selected keyframe counts as selecting its property and layer (as clicking a key does in
+    // After Effects), so selecting a key in the Timeline shows its graph.
+    let mut picked: Vec<(LayerId, u64)> = st.selected_props.clone();
+    for k in &st.selected_keys {
+        if !picked.contains(&(k.layer, k.prop)) {
+            picked.push((k.layer, k.prop));
+        }
+    }
+    if app.ui.timeline.graph_show_selected && !picked.is_empty() {
+        return picked.into_iter().filter(|(l, u)| comp.layer(*l).and_then(|l| l.props.find(*u)).is_some_and(numeric)).collect();
     }
     let mut v = vec![];
-    for l in comp.layers.iter().filter(|l| st.selected_layers.contains(&l.id)) {
+    for l in comp.layers.iter().filter(|l| st.selected_layers.contains(&l.id) || picked.iter().any(|(pl, _)| *pl == l.id)) {
         l.props.walk("", &mut |_, pr| {
             if (pr.is_animated() || pr.has_expression()) && numeric(pr) {
                 v.push((l.id, pr.uid));
@@ -162,10 +170,88 @@ fn curves<'a>(app: &EffectcraftApp, comp: &'a Comp, ectx: &EvalCtx, tm: TMap, pl
     out
 }
 
-fn text_button(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter, x: &mut f32, y: f32, label: &str, on: bool, id: &str, tip: &str) -> bool {
+/// The Graph Editor's button bar, laid out left to right. Buttons that would run past the right
+/// edge (a Timeline narrower than the whole row, #457) go to the "»" menu at its end instead of
+/// being clipped, so every one stays reachable.
+struct ButtonBar {
+    x: f32,
+    /// Where the next button must end to stay on the bar (the "»" button's room is kept free).
+    limit: f32,
+    /// Buttons moved to the "»" menu: (automation id, label, on, tooltip).
+    hidden: Vec<(String, String, bool, String)>,
+    /// The id picked from the "»" menu last frame, run by its button this frame.
+    chosen: Option<String>,
+}
+
+/// The "»" menu's popup and the id it picked (read by the next frame's buttons).
+const MORE_POPUP: &str = "graph-more";
+
+impl ButtonBar {
+    const MORE_W: f32 = 24.0;
+
+    fn new(ctx: &egui::Context, bar: Rect) -> Self {
+        let chosen = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new(MORE_POPUP).with("chosen")));
+        ButtonBar { x: bar.min.x + 8.0, limit: bar.max.x - 8.0 - Self::MORE_W - 4.0, hidden: Vec::new(), chosen }
+    }
+
+    /// The "»" button and its menu, when buttons did not fit.
+    fn more(&mut self, app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter, bar: Rect) {
+        if self.hidden.is_empty() {
+            return;
+        }
+        let t = app.tokens;
+        let r = Rect::from_min_size(pos2(bar.max.x - 8.0 - Self::MORE_W, bar.center().y - 9.0), vec2(Self::MORE_W, 18.0));
+        let pid = egui::Id::new(MORE_POPUP);
+        let resp = ui.interact(r, pid.with("button"), Sense::click()).on_hover_text(crate::i18n::tr("More"));
+        p.rect_filled(r, 3.0, if resp.hovered() { t.hover } else { Color32::from_rgb(0x2c, 0x2c, 0x2c) });
+        p.text(r.center(), Align2::CENTER_CENTER, "»", Tokens::ui(12.0), t.text);
+        app.auto.add("timeline.graph.more", r, "More");
+        if resp.clicked() {
+            let open = widgets::popup_is_open(ui, pid);
+            ui.data_mut(|d| d.insert_temp(pid.with("open"), !open));
+        }
+        if !widgets::popup_is_open(ui, pid) {
+            return;
+        }
+        let rows = self.hidden.len();
+        let pos = r.left_top() - vec2(0.0, rows as f32 * 22.0 + 18.0);
+        let chosen = widgets::popup_list(ui, pid, pos, r, rows, 0, |ui| {
+            let mut chosen = None;
+            for (id, label, on, tip) in &self.hidden {
+                let item = ui.selectable_label(*on, label.as_str()).on_hover_text(tip.as_str());
+                app.auto.add(&format!("timeline.graph.more.{id}"), item.rect, tip);
+                if item.clicked() {
+                    chosen = Some(id.clone());
+                }
+            }
+            chosen
+        });
+        if let Some(id) = chosen {
+            ui.data_mut(|d| d.insert_temp(pid.with("chosen"), id));
+            ui.ctx().request_repaint();
+        }
+    }
+}
+
+fn text_button(
+    app: &mut EffectcraftApp,
+    ui: &mut egui::Ui,
+    p: &egui::Painter,
+    bar: &mut ButtonBar,
+    y: f32,
+    label: &str,
+    on: bool,
+    id: &str,
+    tip: &str,
+) -> bool {
     let t = app.tokens;
     let w = p.layout_no_wrap(label.to_string(), Tokens::ui(11.0), t.text).size().x + 14.0;
-    let r = Rect::from_min_size(pos2(*x, y - 9.0), vec2(w, 18.0));
+    // Once one button overflows, the rest follow it into the menu (they keep their order).
+    if !bar.hidden.is_empty() || bar.x + w > bar.limit {
+        bar.hidden.push((id.to_string(), label.to_string(), on, tip.to_string()));
+        return bar.chosen.as_deref() == Some(id);
+    }
+    let r = Rect::from_min_size(pos2(bar.x, y - 9.0), vec2(w, 18.0));
     let resp = ui.interact(r, egui::Id::new(("graph-btn", id)), Sense::click()).on_hover_text(tip);
     p.rect_filled(
         r,
@@ -180,7 +266,7 @@ fn text_button(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter, x
     );
     p.text(r.center(), Align2::CENTER_CENTER, label, Tokens::ui(11.0), if on { Color32::WHITE } else { t.text });
     app.auto.add(&format!("timeline.graph.{id}"), r, tip);
-    *x += w + 4.0;
+    bar.x += w + 4.0;
     resp.clicked()
 }
 
@@ -197,6 +283,18 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
     app.auto.add("timeline.graph", plot, &app.ui.timeline.graph_mode.clone());
     let speed = speed_graph(app, comp);
     let cs = curves(app, comp, ectx, tm, plot, speed);
+    // Just opened, or the graph type changed (value and speed have different units): frame the
+    // graphs (Fit Selection to View, else Fit All Graphs to View).
+    let was_speed_id = egui::Id::new("graph-was-speed");
+    let type_changed = ctx.data(|d| d.get_temp::<bool>(was_speed_id)).is_some_and(|was| was != speed);
+    ctx.data_mut(|d| d.insert_temp(was_speed_id, speed));
+    if ctx.data_mut(|d| d.remove_temp::<bool>(fit_pending_id())).unwrap_or(false) || type_changed {
+        if cs.iter().any(|c| c.keys.iter().any(|k| k.sel)) {
+            fit_selection(app, &cs, tm, plot);
+        } else {
+            fit_all(app);
+        }
+    }
 
     // Vertical range: auto-zoom to the curves + handles, or the stored manual range.
     let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -298,7 +396,10 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
         let (lid, uid, d) = (c.layer.id, c.prop.uid, c.dim);
         for k in &c.keys {
             let kp = pos2(tm.x(k.t), ymap(k.v));
-            if !plot.expand(6.0).contains(kp) {
+            // In the speed graph an end key rises with the handle being dragged; skipping it once it
+            // leaves the plot would drop the handle's widget and end the drag at the top edge.
+            let handle_dragged = || ["in", "out"].iter().any(|side| ctx.is_being_dragged(egui::Id::new(("ghandle", uid, d, k.idx, *side))));
+            if !plot.expand(6.0).contains(kp) && !handle_dragged() {
                 continue;
             }
             let kjson = json!({"layer": lid.0, "prop": uid, "time": k.time.seconds()});
@@ -341,7 +442,10 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
                     && let Some((press, grabs)) = ctx.data(|dd| dd.get_temp::<HandleDrag>(handle_drag_id()))
                 {
                     ctx.data_mut(|dd| dd.insert_temp(drag_id, true));
-                    let (dt, dv) = (tm.t(pt.x) - tm.t(press.x), vmap(pt.y) - vmap(press.y));
+                    // Shift keeps the handle on the time or the value axis, whichever moved more (as for keys).
+                    let (time_ok, value_ok) = shift_axes(ui.input(|i| i.modifiers.shift), pt.x - press.x, pt.y - press.y);
+                    let dt = if time_ok { tm.t(pt.x) - tm.t(press.x) } else { 0.0 };
+                    let dv = if value_ok { vmap(pt.y) - vmap(press.y) } else { 0.0 };
                     let merge = format!("ghandle-{uid}-{}", k.idx);
                     for g in &grabs {
                         actions.push(("keys.setEase".into(), g.ease(g.end.0 + dt, g.end.1 + dv, speed, &merge)));
@@ -392,7 +496,7 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
             {
                 ctx.data_mut(|dd| dd.insert_temp(drag_id, true));
                 let (dx, dy) = (pt.x - g.press.x, pt.y - g.press.y);
-                let (time_ok, value_ok) = if mods.shift { (dx.abs() >= dy.abs(), dy.abs() > dx.abs()) } else { (true, true) };
+                let (time_ok, value_ok) = shift_axes(mods.shift, dx, dy);
                 // Graph Editor ▸ Snap: to the current time and other keys.
                 let others: Vec<f64> = all_key_times.iter().filter(|(u, i, _)| !(*u == uid && *i == k.idx)).map(|x| x.2).collect();
                 let t = if time_ok { super::graph_tools::snap_time(app, tm, (g.t + (tm.t(pt.x) - tm.t(g.press.x))).max(0.0), &others) } else { g.t };
@@ -446,14 +550,14 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
     p.rect_filled(bar, 0.0, t.panel_bg);
     p.line_segment([bar.left_top(), bar.right_top()], Stroke::new(1.0, t.separator));
     let y = bar.center().y;
-    let mut x = bar.min.x + 8.0;
+    let mut buttons = ButtonBar::new(&ctx, bar);
     let tl = &app.ui.timeline;
     let (auto_type, show_sel, auto_on) = (tl.graph_mode == "auto", tl.graph_show_selected, tl.graph_auto_zoom);
     if text_button(
         app,
         ui,
         p,
-        &mut x,
+        &mut buttons,
         y,
         "Auto",
         auto_type,
@@ -463,45 +567,44 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
         app.ui.timeline.graph_mode = if auto_type { if speed { "speed" } else { "value" } } else { "auto" }.into();
     }
     // Choosing a graph type turns Auto-Select off, as in After Effects.
-    if text_button(app, ui, p, &mut x, y, "Value", !speed, "valueGraph", "Edit Value Graph") {
+    if text_button(app, ui, p, &mut buttons, y, "Value", !speed, "valueGraph", "Edit Value Graph") {
         app.ui.timeline.graph_mode = "value".into();
     }
-    if text_button(app, ui, p, &mut x, y, "Speed", speed, "speedGraph", "Edit Speed Graph") {
+    if text_button(app, ui, p, &mut buttons, y, "Speed", speed, "speedGraph", "Edit Speed Graph") {
         app.ui.timeline.graph_mode = "speed".into();
     }
-    x += 6.0;
-    if text_button(app, ui, p, &mut x, y, "Selected", show_sel, "showSelected", "Show Selected Properties (else all animated properties)") {
+    buttons.x += 6.0;
+    if text_button(app, ui, p, &mut buttons, y, "Selected", show_sel, "showSelected", "Show Selected Properties (else all animated properties)") {
         app.ui.timeline.graph_show_selected = !show_sel;
     }
-    if text_button(app, ui, p, &mut x, y, "Auto-zoom", auto_on, "autoZoom", "Auto-zoom graph height") {
+    if text_button(app, ui, p, &mut buttons, y, "Auto-zoom", auto_on, "autoZoom", "Auto-zoom graph height") {
         app.ui.timeline.graph_auto_zoom = !auto_on;
     }
-    if text_button(app, ui, p, &mut x, y, "Fit", false, "fit", "Fit all graphs to view") {
-        app.ui.timeline.graph_auto_zoom = true;
-        app.ui.timeline.pps = None;
+    if text_button(app, ui, p, &mut buttons, y, "Fit", false, "fit", "Fit all graphs to view") {
+        fit_all(app);
     }
-    if text_button(app, ui, p, &mut x, y, "Fit Selection", false, "fitSelection", "Fit selection to view") {
+    if text_button(app, ui, p, &mut buttons, y, "Fit Selection", false, "fitSelection", "Fit selection to view") {
         fit_selection(app, &cs, tm, plot);
     }
-    x += 6.0;
+    buttons.x += 6.0;
     let (snap, reference, tbox) = (app.ui.timeline.graph_snap, app.ui.timeline.graph_reference, app.ui.timeline.graph_transform_box);
-    if text_button(app, ui, p, &mut x, y, "Snap", snap, "snap", "Snap (key drags snap to the current time and other keys)") {
+    if text_button(app, ui, p, &mut buttons, y, "Snap", snap, "snap", "Snap (key drags snap to the current time and other keys)") {
         app.ui.timeline.graph_snap = !snap;
     }
-    if text_button(app, ui, p, &mut x, y, "Reference", reference, "reference", "Show Reference Graph") {
+    if text_button(app, ui, p, &mut buttons, y, "Reference", reference, "reference", "Show Reference Graph") {
         app.ui.timeline.graph_reference = !reference;
     }
-    if text_button(app, ui, p, &mut x, y, "Transform Box", tbox, "transformBox", "Show Transform Box when multiple keys are selected") {
+    if text_button(app, ui, p, &mut buttons, y, "Transform Box", tbox, "transformBox", "Show Transform Box when multiple keys are selected") {
         app.ui.timeline.graph_transform_box = !tbox;
     }
-    x += 6.0;
+    buttons.x += 6.0;
     let pos_sel = app.session.state.selected_props.iter().find_map(|(l, u)| super::timeline::is_position(comp.layer(*l)?, *u).then_some(l.0));
-    if text_button(app, ui, p, &mut x, y, "Separate Dimensions", false, "separateDimensions", "Separate Dimensions (Position)")
+    if text_button(app, ui, p, &mut buttons, y, "Separate Dimensions", false, "separateDimensions", "Separate Dimensions (Position)")
         && let Some(l) = pos_sel.or(app.session.state.selected_layers.first().map(|l| l.0))
     {
         actions.push(("prop.separateDimensions".into(), json!({"layer": l})));
     }
-    x += 6.0;
+    buttons.x += 6.0;
     for (label, cmd, params, tip) in [
         ("Hold", "keys.interpolation", json!({"interpolation": "hold"}), "Convert selected keyframes to Hold"),
         ("Linear", "keys.interpolation", json!({"interpolation": "linear"}), "Convert selected keyframes to Linear"),
@@ -511,10 +614,35 @@ pub(crate) fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painte
         ("Ease Out", "keys.easyEaseOut", json!({}), "Easy Ease Out (Ctrl+Shift+F9)"),
     ] {
         let id = cmd.trim_start_matches("keys.").to_string() + label.split_whitespace().next().unwrap_or("");
-        if text_button(app, ui, p, &mut x, y, label, false, &id, tip) {
+        if text_button(app, ui, p, &mut buttons, y, label, false, &id, tip) {
             actions.push((cmd.into(), params));
         }
     }
+    buttons.more(app, ui, p, bar);
+}
+
+/// Fit All Graphs to View: the whole comp in time, auto-zoomed values.
+fn fit_all(app: &mut EffectcraftApp) {
+    app.ui.timeline.graph_auto_zoom = true;
+    app.ui.timeline.pps = None;
+}
+
+fn fit_pending_id() -> egui::Id {
+    egui::Id::new("graph-fit-pending")
+}
+
+/// Called every Timeline frame with whether the Graph Editor is on: switching it on (header
+/// button, menu, Shift+F3 or the control channel) frames the graphs on its first frame, when the
+/// plot rect is known, as After Effects does.
+pub(crate) fn track_open(ctx: &egui::Context, on: bool) {
+    let was_id = egui::Id::new("graph-editor-was-on");
+    let was = ctx.data(|d| d.get_temp::<bool>(was_id)).unwrap_or(false);
+    ctx.data_mut(|d| {
+        d.insert_temp(was_id, on);
+        if on && !was {
+            d.insert_temp(fit_pending_id(), true);
+        }
+    });
 }
 
 /// Zoom time and value to the selected keys (and their handles).
@@ -536,10 +664,27 @@ fn fit_selection(app: &mut EffectcraftApp, cs: &[Curve], tm: TMap, plot: Rect) {
     if !t0.is_finite() {
         return;
     }
+    // A lone selected key (one point) also frames its neighbouring keys, so its curve shows
+    // instead of a flat sliver a fraction of a frame wide.
+    if t1 - t0 < 1e-6 {
+        for c in cs {
+            for (i, k) in c.keys.iter().enumerate().filter(|(_, k)| k.sel) {
+                for n in [i.checked_sub(1).and_then(|j| c.keys.get(j)), c.keys.get(i + 1), Some(k)].into_iter().flatten() {
+                    t0 = t0.min(n.t);
+                    t1 = t1.max(n.t);
+                    v0 = v0.min(n.v);
+                    v1 = v1.max(n.v);
+                }
+            }
+        }
+    }
     let span = (t1 - t0).max(0.2);
-    let pps = (plot.width() as f64 * 0.8 / span).clamp(5.0, 4000.0);
-    app.ui.timeline.pps = Some(pps);
-    app.ui.timeline.start = (t0 - span * 0.1).max(0.0);
+    let pps = plot.width() as f64 * 0.8 / span;
+    // Through the timeline's zoom, so the fit never zooms out past the whole comp.
+    if let Some(comp) = app.session.active_comp_arc() {
+        let fit = super::timeline::fit_pps(plot.width(), &comp);
+        super::timeline::set_zoom(&mut app.ui.timeline, &comp, pps, fit, (t0 - span * 0.1).max(0.0), 0.0);
+    }
     let pad = ((v1 - v0) * 0.15).max(1.0);
     app.ui.timeline.graph_auto_zoom = false;
     app.ui.timeline.graph_range = Some((v0 - pad, v1 + pad));
@@ -623,4 +768,22 @@ type HandleDrag = (Pos2, Vec<HandleGrab>);
 
 fn handle_drag_id() -> egui::Id {
     egui::Id::new("graph-handle-drag")
+}
+
+/// Which axes a drag may move on (time, value): both, or with Shift only the one the pointer moved more along.
+fn shift_axes(shift: bool, dx: f32, dy: f32) -> (bool, bool) {
+    if shift { (dx.abs() >= dy.abs(), dy.abs() > dx.abs()) } else { (true, true) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shift_axes;
+
+    #[test]
+    fn shift_locks_drag_to_dominant_axis() {
+        assert_eq!(shift_axes(false, 10.0, 3.0), (true, true));
+        assert_eq!(shift_axes(true, 10.0, -3.0), (true, false));
+        assert_eq!(shift_axes(true, 2.0, -9.0), (false, true));
+        assert_eq!(shift_axes(true, 5.0, 5.0), (true, false));
+    }
 }

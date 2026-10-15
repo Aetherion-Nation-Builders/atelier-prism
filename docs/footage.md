@@ -26,7 +26,7 @@ dialog shows the run it found (and any missing frames) with these options:
 
 | Option | What it does |
 |---|---|
-| **PNG Sequence** (EXR, TIFF, JPG… after the file type) | On: the whole run imports as one sequence. Off: just the picked file imports, as a still. |
+| **PNG Sequence** (EXR, TIFF, JPG… after the file type) | On: the whole run imports as one sequence. Off (the default, as in After Effects): the picked files import as stills. |
 | **Force alphabetical order** | Imports every image of that type in the folder in name order, whatever the numbering, and plays the files one after another (gaps in the numbering don't count). Use it for files that aren't numbered consistently. |
 | **Frame rate (fps)** | The sequence's frame rate. The default comes from Settings ▸ Import ▸ Sequence Footage (30 fps). |
 
@@ -34,10 +34,14 @@ Other ways in:
 
 - **Pick part of a run** (Shift-click the first and the last frame in the file dialog) to import
   just that range as one sequence.
-- **Pick or drop every frame** of the run: it arrives as one sequence, not one item per frame.
+- **Pick every frame** of the run with the Sequence option on: it arrives as one sequence, not
+  one item per frame.
 - **Drop a folder**: its media files import, and each numbered run in it becomes a sequence.
-- **In the browser** (the web app) there are no folders to look in, so pick or drop all the
-  frames of the sequence at once.
+  Alt-drag the folder to import its files one by one.
+- **Dropped files** import as stills, one item each, as in After Effects; drop the folder (or use
+  File ▸ Import ▸ File… with the Sequence option) for a sequence.
+- **In the browser** (the web app) there are no folders to look in, so pick all the frames of
+  the sequence at once with the Sequence option on.
 
 Stills of any format EffectCraft reads can form a sequence: PNG, JPEG, TIFF, OpenEXR, BMP and
 WebP. Layered and vector documents (PSD, SVG, PDF) import one by one.
@@ -48,8 +52,23 @@ Effects does, so every other frame stays at its number. Render or copy the missi
 folder and choose File ▸ Reload Footage to fill the gaps.
 
 Agents: `file.import {"paths": ["/shots/shot_0001.png"], "sequence": true, "frameRate": 24}`.
-`sequence` is on by default; `"sequence": false` imports the file as a still, and
-`"alphabetical": true` is Force Alphabetical Order.
+Without `sequence`, a numbered file brings its whole run and a folder's numbered runs import as
+sequences, except dropped files (`"drag": true`), which import as stills as in After Effects.
+`"sequence": true` is the Sequence option (one file brings its whole run), `"sequence": false`
+imports stills and a folder's files one by one, and `"alphabetical": true` is Force Alphabetical
+Order.
+
+## Importing another project
+
+File ▸ Import ▸ EffectCraft Project… (or an `.ecproj` / `.ecprojx` file given to File ▸ Import)
+merges that project into the open one, inside a folder named after the file, as After Effects
+imports an `.aep`. Every item, layer and property id moves past the open project's, so precomps,
+parents, track mattes, Layer Control values, Essential Graphics and tracker targets keep pointing
+at the right things. It is one undo step. Footage paths relative to the imported project resolve
+next to it.
+
+Agents: `file.importProject {"path": "/projects/titles.ecproj"}` returns the comps, the root comps,
+`primaryComp` (the only root comp, if there is one) and any missing media.
 
 ## Interpret Footage
 
@@ -91,6 +110,21 @@ vectors, positions and IDs are never the picture. EXtractoR reads every other la
 - **File ▸ Replace Footage ▸ File…** (Ctrl+H) points the item at another file. Pick a numbered
   file to replace it with that file's whole sequence (`file.replaceFootage {"path": …,
   "sequence": false}` for one frame).
+- **Replace with Precomposition (used N times)**, right-clicking a footage item or solid in the
+  Project panel, puts the item in a new composition of its size,
+  pixel aspect and frame rate, in the same folder, and switches every layer in every composition
+  that used the item to that composition. Layers keep their timing, transforms, effects and
+  masks, and the item stays in the project. The composition lasts as long as the footage, or as
+  the longest layer that showed a still or solid. One undo step (`file.replaceWithPrecomp
+  {"item"?}`).
+- **Relinking moved files.** `footage.relink {"item": id, "path": …}` points a missing item at
+  its file's new location, keeping its interpretation, and relinks every other missing item that
+  was in the same place relative to it (the whole folder moved, a drive was renamed, a project
+  made on Windows opened on macOS); File ▸ Replace Footage on a missing item does the same. One
+  undo step; `footage.missing` lists what is still missing.
+- **A project moved with its footage** finds it again on open: the footage check that runs after
+  File ▸ Open tries each missing file at the same place under the project's new folder, without
+  marking the project modified.
 - **File ▸ Reload Footage** (Ctrl+Alt+L) reads the files again. A sequence picks up frames
   added to its folder (a render still in progress) and keeps its interpretation.
 

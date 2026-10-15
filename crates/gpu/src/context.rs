@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex, Weak};
 
 use effectcraft_effects::Buf;
 use effectcraft_raster::Image;
-use wgpu::util::DeviceExt;
 
 /// Compute entry points in `kernels.wgsl` (one pipeline each).
 const ENTRIES: &[&str] = &[
@@ -18,20 +17,17 @@ const ENTRIES: &[&str] = &[
     "quantize",
     "convert",
     "half",
-    "box_h",
-    "box_v",
-    "directional",
-    "glow_bright",
-    "glow_combine",
-    "shadow_make",
-    "shadow_combine",
-    "pointwise",
     "adjust_mix",
     "bokeh_boost",
     "bokeh_prefix",
     "bokeh_gather",
     "fill",
 ];
+
+/// Effect entry points in `kernels.wgsl`. Like the `fx_*` kernels, one that fails to build
+/// (a driver's shader compiler rejecting it, #613) leaves its effects to the CPU instead of
+/// turning the whole compositor off.
+const EFFECT_ENTRIES: &[&str] = &["box_h", "box_v", "directional", "glow_bright", "glow_combine", "shadow_make", "shadow_combine", "pointwise"];
 
 /// Entry points that also bind group 1 (four read-only storage buffers; see
 /// [`Enc::dispatch_ext`]).
@@ -41,11 +37,14 @@ const EXT_ENTRIES: &[&str] = &["classic3d"];
 /// 8/16 bpc are emulated by clamping and quantising, as on the CPU).
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
-/// Uploaded layer buffers kept on the GPU (bytes).
+/// Uploaded layer buffers kept on the GPU by default (bytes; [`GpuContext::set_upload_budget`]).
 const UPLOAD_BUDGET: usize = 1536 << 20;
 
 /// Working textures kept for reuse once their last image is dropped (bytes).
 const POOL_BUDGET: usize = 768 << 20;
+
+/// Readback staging buffers kept for reuse across sizes (bytes).
+const STAGING_BUDGET: u64 = 256 << 20;
 
 /// A GPU image: premultiplied RGBA f32 in a texture (cheap to clone; immutable once written).
 /// Working images come from the context's texture pool and go back to it when the last clone
@@ -72,6 +71,8 @@ impl GpuImage {
 struct Lease {
     texture: wgpu::Texture,
     pool: Weak<Mutex<Pool>>,
+    /// The [`Enc`] that took it (see [`Pool::owned`]).
+    owner: u64,
 }
 
 impl std::fmt::Debug for Lease {
@@ -85,7 +86,7 @@ impl Drop for Lease {
         if let Some(pool) = self.pool.upgrade()
             && let Ok(mut p) = pool.lock()
         {
-            p.release(self.texture.clone());
+            p.release_owned(self.texture.clone(), self.owner);
         }
     }
 }
@@ -109,7 +110,17 @@ pub(crate) struct Pool {
     /// Working textures reused / newly allocated (diagnostics, tests).
     hits: u64,
     misses: u64,
+    /// Textures released while the [`Enc`] that took them is alive, kept for that `Enc` only.
+    /// Its later commands run after everything it recorded or submitted before (one queue,
+    /// recording order), so it can overwrite them at once instead of allocating a new texture
+    /// for every intermediate of a frame (a 4K frame holds dozens). Other encoders never see a
+    /// working texture of another `Enc` before it is gone.
+    owned: HashMap<u64, HashMap<(u32, u32), Vec<wgpu::Texture>>>,
+    next_owner: u64,
 }
+
+/// In-`Enc` texture reuse ([`Pool::owned`]); tests turn it off to compare.
+pub(crate) static TEXTURE_REUSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Counts of uploads (CPU → GPU) and readbacks (GPU → CPU).
 #[derive(Default)]
@@ -179,6 +190,37 @@ impl Pool {
         }
     }
 
+    fn register(&mut self) -> u64 {
+        self.next_owner += 1;
+        if TEXTURE_REUSE.load(std::sync::atomic::Ordering::Relaxed) {
+            self.owned.insert(self.next_owner, HashMap::new());
+        }
+        self.next_owner
+    }
+
+    /// `Enc` `owner` is gone: its kept textures go through the shared pool.
+    fn unregister(&mut self, owner: u64) {
+        if let Some(m) = self.owned.remove(&owner) {
+            for t in m.into_values().flatten() {
+                self.release(t);
+            }
+        }
+    }
+
+    fn release_owned(&mut self, t: wgpu::Texture, owner: u64) {
+        if let Some(m) = self.owned.get_mut(&owner) {
+            m.entry((t.width(), t.height())).or_default().push(t);
+            return;
+        }
+        self.release(t);
+    }
+
+    fn take_owned(&mut self, owner: u64, w: u32, h: u32) -> Option<wgpu::Texture> {
+        let t = self.owned.get_mut(&owner)?.get_mut(&(w, h))?.pop()?;
+        self.hits += 1;
+        Some(t)
+    }
+
     fn take(&mut self, w: u32, h: u32) -> Option<wgpu::Texture> {
         let t = self.free.get_mut(&(w, h)).and_then(Vec::pop);
         match &t {
@@ -244,6 +286,8 @@ pub struct GpuContext {
     bgl: wgpu::BindGroupLayout,
     bgl_ext: wgpu::BindGroupLayout,
     pipelines: HashMap<&'static str, wgpu::ComputePipeline>,
+    /// Effect kernels that failed to build, and why (their effects render on the CPU).
+    unavailable: Vec<(&'static str, String)>,
     display_bgl: wgpu::BindGroupLayout,
     display: wgpu::ComputePipeline,
     /// The display texture's next mip level from the one above (`display.wgsl` `mip`).
@@ -252,6 +296,8 @@ pub struct GpuContext {
     dummy_tex: wgpu::TextureView,
     dummy_buf: wgpu::Buffer,
     uploads: Mutex<Uploads>,
+    upload_budget: std::sync::atomic::AtomicUsize,
+    upload_full_warned: std::sync::atomic::AtomicBool,
     pool: Arc<Mutex<Pool>>,
     /// CPU ↔ GPU traffic (diagnostics: `bench --gpu`).
     pub(crate) transfers: Transfers,
@@ -326,7 +372,34 @@ fn init_resource<T>(_device: &wgpu::Device, _label: &str, create: impl FnOnce() 
     Ok(create())
 }
 
+/// A buffer holding `contents` (padded to 4 bytes), written through the queue. Unlike
+/// `DeviceExt::create_buffer_init`, which maps the buffer at creation and panics when the
+/// allocation failed (a driver reports it as an internal error, not out-of-memory: Adreno's
+/// `ERROR_INITIALIZATION_FAILED`, #591), a failed allocation only yields an invalid buffer and
+/// an error for the caller's error scope.
+pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Option<&str>, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+    let align = wgpu::COPY_BUFFER_ALIGNMENT as usize;
+    let padded = contents.len().div_ceil(align).saturating_mul(align);
+    let buffer =
+        device.create_buffer(&wgpu::BufferDescriptor { label, size: padded as u64, usage: usage | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    if padded > 0 {
+        if padded == contents.len() {
+            queue.write_buffer(&buffer, 0, contents);
+        } else {
+            let mut data = contents.to_vec();
+            data.resize(padded, 0);
+            queue.write_buffer(&buffer, 0, &data);
+        }
+    }
+    buffer
+}
+
 impl GpuContext {
+    /// [`buffer_init`] on this context's device.
+    pub(crate) fn buffer_init(&self, label: Option<&str>, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+        buffer_init(&self.device, &self.queue, label, contents, usage)
+    }
+
     /// Build on an existing device (the desktop app shares egui-wgpu's). `Err` when the
     /// adapter cannot run the compositor (no compute shaders, e.g. WebGL2; no float storage
     /// textures) or the device was created with limits below what its pipelines bind.
@@ -450,7 +523,29 @@ impl GpuContext {
                 immediate_size: 0,
             })
         })?;
-        let pipelines = ENTRIES
+        let build = |e: &'static str, layout: &wgpu::PipelineLayout| {
+            init_resource(&device, e, || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(e),
+                    layout: Some(layout),
+                    module: &module,
+                    entry_point: Some(e),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+            })
+        };
+        // The compositor's own kernels are required; an effect kernel that doesn't build is
+        // left out, and its effects render on the CPU (see `Enc::take_missing`).
+        let mut pipelines = ENTRIES
+            .iter()
+            .chain(crate::adv3d::SKY_KERNELS)
+            .map(|e| (e, &layout))
+            .chain(EXT_ENTRIES.iter().map(|e| (e, &layout_ext)))
+            .map(|(e, layout)| Ok((*e, build(e, layout)?)))
+            .collect::<Result<HashMap<_, _>, String>>()?;
+        let mut unavailable = vec![];
+        for e in EFFECT_ENTRIES
             .iter()
             .chain(crate::fx_color::KERNELS)
             .chain(crate::fx_distort::KERNELS)
@@ -472,23 +567,17 @@ impl GpuContext {
             .chain(crate::fx_time::KERNELS)
             .chain(crate::fx_pixel2::KERNELS)
             .chain(crate::fx_gen2::KERNELS)
-            .chain(crate::adv3d::SKY_KERNELS)
-            .map(|e| (e, &layout))
-            .chain(EXT_ENTRIES.iter().map(|e| (e, &layout_ext)))
-            .map(|(e, layout)| {
-                let p = init_resource(&device, e, || {
-                    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                        label: Some(e),
-                        layout: Some(layout),
-                        module: &module,
-                        entry_point: Some(e),
-                        compilation_options: Default::default(),
-                        cache: None,
-                    })
-                })?;
-                Ok((*e, p))
-            })
-            .collect::<Result<HashMap<_, _>, String>>()?;
+        {
+            match build(e, &layout) {
+                Ok(p) => {
+                    pipelines.insert(*e, p);
+                }
+                Err(why) => {
+                    log::warn!("gpu {name}: kernel {e} unavailable, its effects render on the CPU: {why}");
+                    unavailable.push((*e, why));
+                }
+            }
+        }
         let dmodule = init_resource(&device, "display shader module", || {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("effectcraft display"),
@@ -534,9 +623,8 @@ impl GpuContext {
                 view_formats: &[],
             })
         })?;
-        let dummy_buf = init_resource(&device, "dummy storage buffer", || {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("dummy"), contents: &[0u8; 16], usage: wgpu::BufferUsages::STORAGE })
-        })?;
+        let dummy_buf =
+            init_resource(&device, "dummy storage buffer", || buffer_init(&device, &queue, Some("dummy"), &[0u8; 16], wgpu::BufferUsages::STORAGE))?;
         let dummy_tex = init_resource(&device, "dummy texture view", || dummy.create_view(&Default::default()))?;
         let max_dim = device.limits().max_texture_dimension_2d;
         Ok(GpuContext {
@@ -547,6 +635,7 @@ impl GpuContext {
             bgl,
             bgl_ext,
             pipelines,
+            unavailable,
             display_bgl,
             display,
             display_mip,
@@ -554,6 +643,8 @@ impl GpuContext {
             dummy,
             dummy_buf,
             uploads: Mutex::new(Uploads::default()),
+            upload_budget: std::sync::atomic::AtomicUsize::new(UPLOAD_BUDGET),
+            upload_full_warned: Default::default(),
             pool: Default::default(),
             staging: Default::default(),
             transfers: Default::default(),
@@ -721,6 +812,24 @@ impl GpuContext {
 
     /// Readbacks (GPU → CPU) are possible: waited for natively, or deferred (a browser
     /// worker, [`crate::deferred`]). Impossible on the browser's main thread.
+    /// Effect kernels the device couldn't build, with why: their effects render on the CPU.
+    pub fn unavailable_kernels(&self) -> &[(&'static str, String)] {
+        &self.unavailable
+    }
+
+    /// Leave kernel `entry` out, as if it had failed to build (tests of the CPU fallback).
+    #[cfg(test)]
+    pub(crate) fn drop_kernel(&mut self, entry: &'static str) {
+        self.pipelines.remove(entry);
+        self.unavailable.push((entry, "dropped by a test".into()));
+    }
+
+    /// Bytes of readback staging buffers kept for reuse (tests).
+    #[cfg(test)]
+    pub(crate) fn staging_bytes(&self) -> u64 {
+        self.staging.lock().map(|s| s.iter().map(|(k, v)| k * v.len() as u64).sum()).unwrap_or(0)
+    }
+
     pub fn can_readback(&self) -> bool {
         self.readbacks.check().is_ok() && (self.can_wait() || self.deferred.is_some())
     }
@@ -755,13 +864,24 @@ impl GpuContext {
 
     /// A pooled working texture: (image, reused). A reused texture holds old pixels; a new
     /// one is zeroed.
-    fn pooled(&self, w: u32, h: u32) -> (GpuImage, bool) {
+    fn pooled(&self, w: u32, h: u32, owner: u64) -> (GpuImage, bool) {
         let (w, h) = (w.max(1), h.max(1));
-        let reused = self.pool.lock().ok().and_then(|mut p| p.take(w, h));
+        let reused = self.pool.lock().ok().and_then(|mut p| p.take_owned(owner, w, h).or_else(|| p.take(w, h)));
         let was_reused = reused.is_some();
         let texture = reused.unwrap_or_else(|| self.texture(w, h));
-        let lease = Arc::new(Lease { texture: texture.clone(), pool: Arc::downgrade(&self.pool) });
+        let lease = Arc::new(Lease { texture: texture.clone(), pool: Arc::downgrade(&self.pool), owner });
         (GpuImage { texture, width: w, height: h, _lease: Some(lease), levels: None }, was_reused)
+    }
+
+    /// Bytes of uploaded layer textures the context keeps (default 1536 MB). An application that
+    /// knows the device's memory can raise it (static layers of a big frame upload once) or lower
+    /// it (a small GPU); the least recently used textures go first.
+    pub fn set_upload_budget(&self, bytes: usize) {
+        self.upload_budget.store(bytes.max(1 << 20), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn upload_budget(&self) -> usize {
+        self.upload_budget.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Uploads and readbacks so far (images; uploads of cached layers count once).
@@ -820,7 +940,8 @@ impl GpuContext {
             }
             u.bytes += bytes;
             // Drop textures of freed buffers, then the least recently used over budget.
-            if u.bytes > UPLOAD_BUDGET {
+            let budget = self.upload_budget();
+            if u.bytes > budget {
                 let dead: Vec<usize> = u.map.iter().filter(|(_, e)| e.buf.strong_count() == 0).map(|(k, _)| *k).collect();
                 for k in dead {
                     if let Some(e) = u.map.remove(&k) {
@@ -828,7 +949,14 @@ impl GpuContext {
                     }
                 }
             }
-            while u.bytes > UPLOAD_BUDGET {
+            if u.bytes > budget && !self.upload_full_warned.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log::warn!(
+                    target: "effectcraft_gpu",
+                    "GPU upload cache full ({} MB): evicting layer textures, which upload again when next used; a frame whose static layers exceed it re-uploads them every frame",
+                    budget >> 20
+                );
+            }
+            while u.bytes > budget {
                 let Some(k) = u.map.iter().min_by_key(|(_, e)| e.last_use).map(|(k, _)| *k) else { break };
                 if let Some(e) = u.map.remove(&k) {
                     u.bytes -= e.bytes;
@@ -859,22 +987,34 @@ pub(crate) struct Enc<'g> {
     /// The open command encoder and its id in the texture pool.
     enc: Option<(wgpu::CommandEncoder, u64)>,
     pending: usize,
+    /// A dispatch named a kernel the device doesn't have (see [`Enc::take_missing`]).
+    missing: bool,
+    /// This `Enc`'s id in the texture pool (textures it may reuse at once).
+    owner: u64,
 }
 
 impl Drop for Enc<'_> {
     fn drop(&mut self) {
         // Unsubmitted work is discarded, so nothing recorded will read pooled textures.
-        if let Some((_, id)) = self.enc.take()
-            && let Ok(mut p) = self.g.pool.lock()
-        {
-            p.close(id);
+        if let Ok(mut p) = self.g.pool.lock() {
+            if let Some((_, id)) = self.enc.take() {
+                p.close(id);
+            }
+            p.unregister(self.owner);
         }
     }
 }
 
 impl<'g> Enc<'g> {
     pub fn new(g: &'g GpuContext) -> Enc<'g> {
-        Enc { g, enc: None, pending: 0 }
+        let owner = g.pool.lock().map(|mut p| p.register()).unwrap_or(0);
+        Enc { g, enc: None, pending: 0, missing: false, owner }
+    }
+
+    /// Whether a dispatch since the last call named a kernel the device doesn't have (one
+    /// that failed to build): its output is wrong, and the effect must render on the CPU.
+    pub(crate) fn take_missing(&mut self) -> bool {
+        std::mem::take(&mut self.missing)
     }
 
     pub(crate) fn encoder(&mut self) -> &mut wgpu::CommandEncoder {
@@ -890,7 +1030,7 @@ impl<'g> Enc<'g> {
 
     /// A new zeroed image (pooled; a reused texture is cleared by a kernel).
     pub fn image(&mut self, w: u32, h: u32) -> GpuImage {
-        let (img, reused) = self.g.pooled(w, h);
+        let (img, reused) = self.g.pooled(w, h, self.owner);
         if reused {
             self.fill(&img, 0.0);
         }
@@ -900,7 +1040,7 @@ impl<'g> Enc<'g> {
     /// A new image for a kernel that writes every pixel of it (pooled; contents undefined).
     /// Under test it starts out as NaNs, so a kernel that skips pixels fails the CPU oracle.
     pub fn scratch(&mut self, w: u32, h: u32) -> GpuImage {
-        let (img, _) = self.g.pooled(w, h);
+        let (img, _) = self.g.pooled(w, h, self.owner);
         if cfg!(test) {
             self.fill(&img, f32::NAN);
         }
@@ -954,10 +1094,13 @@ impl<'g> Enc<'g> {
     ) {
         let g = self.g;
         let Some(pipe) = g.pipelines.get(entry) else {
-            log::error!("gpu: no kernel {entry}");
+            if !g.unavailable.iter().any(|(e, _)| *e == entry) {
+                log::error!("gpu: no kernel {entry}");
+            }
+            self.missing = true;
             return;
         };
-        let ub = g.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: None, contents: &p.bytes(), usage: wgpu::BufferUsages::UNIFORM });
+        let ub = g.buffer_init(None, &p.bytes(), wgpu::BufferUsages::UNIFORM);
         let sv = src.texture.create_view(&Default::default());
         let av = aux.map(|a| a.texture.create_view(&Default::default()));
         let ov = out.texture.create_view(&Default::default());
@@ -1089,9 +1232,15 @@ impl<'g> Enc<'g> {
         }
         out.copy_from_slice(&bytes);
         // Keep a few staging buffers per size (frames read back at the same size every time).
+        // Layers whose bounds change every frame read back at a new size each time: drop the
+        // other sizes once over budget, or mapped host memory grows for the whole render (#2081).
         if let Ok(mut s) = self.g.staging.lock() {
+            let held: u64 = s.iter().map(|(k, v)| k.saturating_mul(v.len() as u64)).sum();
+            if held.saturating_add(size) > STAGING_BUDGET {
+                s.retain(|k, _| *k == size);
+            }
             let v = s.entry(size).or_default();
-            if v.len() < 2 && size <= 256 << 20 {
+            if v.len() < 2 && size <= STAGING_BUDGET {
                 v.push(buf);
             }
         }
@@ -1190,7 +1339,7 @@ impl<'g> Enc<'g> {
         while bytes.len() < 16 || !bytes.len().is_multiple_of(4) {
             bytes.push(0);
         }
-        self.g.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("data"), contents: &bytes, usage: wgpu::BufferUsages::STORAGE })
+        self.g.buffer_init(Some("data"), &bytes, wgpu::BufferUsages::STORAGE)
     }
 
     /// Convert to the viewer's premultiplied RGBA8 texture (egui-wgpu's native texture format),

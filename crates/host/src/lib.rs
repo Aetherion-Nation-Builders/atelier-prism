@@ -12,6 +12,8 @@ use effectcraft_engine::{ExportJob, ExportResult, Exporter, Importer, Session};
 use effectcraft_project::Footage;
 pub use effectcraft_script as script;
 
+pub mod app_dirs;
+
 struct MediaImporter;
 
 impl Importer for MediaImporter {
@@ -97,20 +99,10 @@ pub fn session() -> Session {
 
 /// The platform config directory for EffectCraft (`EFFECTCRAFT_CONFIG_DIR` overrides):
 /// `~/Library/Application Support/EffectCraft` (macOS), `%APPDATA%\EffectCraft` (Windows),
-/// `$XDG_CONFIG_HOME/effectcraft` or `~/.config/effectcraft` (Linux and others).
+/// `$XDG_CONFIG_HOME/effectcraft` or `~/.config/effectcraft` (Linux and others). A `portable.txt`
+/// beside the executable puts it in `EffectCraftData` there instead ([`app_dirs`]).
 pub fn config_dir() -> Option<std::path::PathBuf> {
-    use std::path::PathBuf;
-    if let Some(d) = std::env::var_os("EFFECTCRAFT_CONFIG_DIR") {
-        return Some(PathBuf::from(d));
-    }
-    let home = || std::env::var_os("HOME").map(PathBuf::from);
-    if cfg!(target_os = "macos") {
-        return home().map(|h| h.join("Library/Application Support/EffectCraft"));
-    }
-    if cfg!(target_os = "windows") {
-        return std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("EffectCraft"));
-    }
-    std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| home().map(|h| h.join(".config"))).map(|c| c.join("effectcraft"))
+    app_dirs::current().dir.clone()
 }
 
 #[cfg(test)]
@@ -255,6 +247,38 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         // Half the comp height wide, seen at an angle: well over 5% of the frame.
         assert!(red * 20 > img.data.len(), "red cube pixels: {red} of {}", img.data.len());
+    }
+
+    /// #651: an animated GIF imported from disk plays: the layer shows each frame at its time,
+    /// in the viewer's renders and in exports alike.
+    #[test]
+    fn an_imported_animated_gif_plays() {
+        let dir = std::env::temp_dir().join(format!("ec-gif-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("anim.gif");
+        let mut bytes = Vec::new();
+        {
+            let mut enc = gif::Encoder::new(&mut bytes, 4, 4, &[]).unwrap();
+            for rgb in [[255u8, 0, 0], [0, 255, 0], [0, 0, 255]] {
+                let mut f = gif::Frame::from_rgb(4, 4, &rgb.repeat(16));
+                f.delay = 10;
+                enc.write_frame(&f).unwrap();
+            }
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let mut s = super::session();
+        s.execute("comp.new", json!({"name": "G", "width": 4, "height": 4, "frameRate": 30, "duration": 1})).unwrap();
+        s.execute("file.import", json!({"paths": [path.to_string_lossy()], "addToComp": true})).unwrap();
+        let cid = s.active_comp_id().unwrap();
+        let rgb = |t: f64| {
+            let img = s.render(cid, effectcraft_time::Tick::from_seconds_f64(t), effectcraft_engine::render::RenderOpts::default());
+            let p = img.data[5];
+            [p[0].round(), p[1].round(), p[2].round()]
+        };
+        assert_eq!(rgb(0.05), [1.0, 0.0, 0.0]);
+        assert_eq!(rgb(0.15), [0.0, 1.0, 0.0]);
+        assert_eq!(rgb(0.25), [0.0, 0.0, 1.0]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// The web app's path: outputs go to a sink (downloads), never to the file system.
