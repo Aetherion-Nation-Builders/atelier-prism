@@ -1,5 +1,8 @@
 //! Scripts see the host's files: existence checks go through `Services`, like reads, so a host
 //! that keeps files in memory (the web editor's browser storage) answers for its own files.
+// Atelier: test-only, but under `cfg(all(test, not(windows)))`, which clippy's
+// allow-unwrap-in-tests does not recognise.
+#![allow(clippy::unwrap_used)]
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
