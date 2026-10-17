@@ -511,6 +511,128 @@ fn bridge_rejects_non_loopback() {
     assert!(Backend::bridge("localhost:9877").is_ok());
 }
 
+/// The app applies the first request but loses its reply. The next connection can be either
+/// an automatic retry or an explicit follow-up; the returned counts distinguish them.
+fn lost_reply_server(first_reply: Option<&'static str>) -> (String, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let worker = std::thread::spawn(move || {
+        let mut session = Session::default();
+        let mut mutations = 0;
+        for attempt in 0..2 {
+            let (stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+            let mut output = stream.try_clone().unwrap();
+            let mut input = String::new();
+            BufReader::new(stream).read_line(&mut input).unwrap();
+            let request: Value = serde_json::from_str(&input).unwrap();
+            let result = if request["method"] == "engine.execute" {
+                mutations += 1;
+                session.execute(request["params"]["command"].as_str().unwrap(), request["params"]["params"].clone()).unwrap()
+            } else if request["method"] == "ui.inspect" || (request["method"] == "ui.playback" && request["params"]["action"] == "status") {
+                json!({"mutations": mutations, "requests": attempt + 1, "comps": session.project.comps().count()})
+            } else {
+                mutations += 1;
+                json!({"mutations": mutations})
+            };
+            if attempt == 1 {
+                writeln!(output, "{}", json!({"id": request["id"], "ok": true, "result": result})).unwrap();
+            } else if let Some(reply) = first_reply {
+                writeln!(output, "{reply}").unwrap();
+            }
+        }
+    });
+    (addr, worker)
+}
+
+#[test]
+fn bridge_does_not_replay_a_mutation_when_its_reply_is_lost() {
+    let (addr, worker) = lost_reply_server(None);
+    let mut backend = Backend::bridge(&addr).unwrap();
+    let error = backend.exec("comp.new", json!({"width": 64, "height": 48, "duration": 1})).unwrap_err();
+    assert!(error.to_string().contains("outcome is unknown"), "{error}");
+    let state = backend.control("ui.inspect", json!({})).unwrap();
+    assert_eq!(state["mutations"], 1, "the first command was applied exactly once");
+    assert_eq!(state["comps"], 1);
+    worker.join().unwrap();
+}
+
+#[test]
+fn bridge_retries_read_only_queries_after_a_lost_reply() {
+    let (addr, worker) = lost_reply_server(None);
+    let mut backend = Backend::bridge(&addr).unwrap();
+    let state = backend.control("ui.inspect", json!({})).unwrap();
+    assert_eq!(state["requests"], 2);
+    assert_eq!(state["mutations"], 0);
+    worker.join().unwrap();
+}
+
+#[test]
+fn bridge_reports_unknown_outcome_after_a_malformed_mutation_reply() {
+    let (addr, worker) = lost_reply_server(Some("{invalid reply"));
+    let mut backend = Backend::bridge(&addr).unwrap();
+    let error = backend.exec("comp.new", json!({"width": 64, "height": 48, "duration": 1})).unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("outcome is unknown") && message.contains("bad reply"), "{message}");
+    assert_eq!(backend.control("ui.inspect", json!({})).unwrap()["comps"], 1);
+    worker.join().unwrap();
+}
+
+#[test]
+fn bridge_does_not_assume_an_unknown_method_is_read_only() {
+    let (addr, worker) = lost_reply_server(None);
+    let mut backend = Backend::bridge(&addr).unwrap();
+    let error = backend.control("future.customOperation", json!({})).unwrap_err();
+    assert!(error.to_string().contains("outcome is unknown"), "{error}");
+    assert_eq!(backend.control("ui.inspect", json!({})).unwrap()["mutations"], 1);
+    worker.join().unwrap();
+}
+
+#[test]
+fn bridge_playback_edits_and_default_toggle_are_not_replayed() {
+    for params in [json!({}), json!({"action": "toggle"}), json!({"action": "play"}), json!({"action": "stop"})] {
+        let (addr, worker) = lost_reply_server(None);
+        let mut backend = Backend::bridge(&addr).unwrap();
+        let error = backend.control("ui.playback", params).unwrap_err();
+        assert!(error.to_string().contains("outcome is unknown"), "{error}");
+        assert_eq!(backend.control("ui.inspect", json!({})).unwrap()["mutations"], 1);
+        worker.join().unwrap();
+    }
+}
+
+#[test]
+fn bridge_playback_status_can_be_retried() {
+    let (addr, worker) = lost_reply_server(None);
+    let mut backend = Backend::bridge(&addr).unwrap();
+    let state = backend.control("ui.playback", json!({"action": "status"})).unwrap();
+    assert_eq!(state["requests"], 2);
+    assert_eq!(state["mutations"], 0);
+    worker.join().unwrap();
+}
+
+#[test]
+fn bridge_connect_failure_can_be_retried_when_the_app_starts() {
+    let reserved = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = reserved.local_addr().unwrap();
+    drop(reserved);
+    let mut backend = Backend::bridge(&addr.to_string()).unwrap();
+    let error = backend.control("ui.inspect", json!({})).unwrap_err();
+    assert!(error.to_string().contains("cannot connect"), "{error}");
+    assert!(!error.to_string().contains("outcome is unknown"), "nothing was sent");
+    let listener = TcpListener::bind(addr).unwrap();
+    let worker = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        let mut output = stream.try_clone().unwrap();
+        let mut input = String::new();
+        BufReader::new(stream).read_line(&mut input).unwrap();
+        let request: Value = serde_json::from_str(&input).unwrap();
+        writeln!(output, "{}", json!({"id": request["id"], "ok": true, "result": {"ready": true}})).unwrap();
+    });
+    assert_eq!(backend.control("ui.inspect", json!({})).unwrap()["ready"], true);
+    worker.join().unwrap();
+}
+
 #[test]
 fn script_ui_and_history_tools() {
     let mut sess = Session::default();
@@ -681,6 +803,12 @@ fn list_fonts_lists_families_with_styles() {
     assert!(matched.len() < fams.len(), "the query filters: {one}");
     let mono = matched.iter().find(|f| f["family"] == "JetBrains Mono").unwrap_or_else(|| panic!("{one}"));
     assert!(mono["styles"].as_array().unwrap().contains(&json!("Regular")), "{one}");
+    assert_eq!(mono["variable"], false, "{one}");
+    // `variable` keeps only the variable fonts (the font menu's filter); the static bundled
+    // families drop out.
+    let var = call_json(&mut s, "list_fonts", json!({"variable": true}));
+    let listed = var["families"].as_array().unwrap();
+    assert!(listed.iter().all(|f| f["variable"] == true && f["family"] != "Inter"), "{var}");
 }
 
 /// Trained models over MCP (Roto Brush and face tracking): listed with their authors and
@@ -1180,4 +1308,75 @@ fn command_tools_accept_id_as_an_alias() {
     call_json(&mut s, "execute_command", json!({"id": "comp.new", "params": {"name": "Alias", "width": 64, "height": 36}}));
     let (_, err) = call(&mut s, "execute_command", json!({}));
     assert!(err, "neither key is an error");
+}
+
+/// #500: `--automation-read-root` / `--automation-write-root` confine the files an agent reads
+/// and writes: inside the roots works, outside (or relative, `..`, through a symbolic link, by
+/// a batch step, by Save to the project's own file, from a script) is refused.
+#[test]
+fn automation_roots_confine_file_access() {
+    use crate::confine::Confinement;
+    let base = std::env::temp_dir().join(format!("ec-mcp-confine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (read, write, outside) = (base.join("in"), base.join("out"), base.join("elsewhere"));
+    for d in [&read, &write, &outside] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let p = |d: &std::path::Path, f: &str| d.join(f).to_string_lossy().into_owned();
+    // Unconfined (the default): anywhere.
+    let mut s = server();
+    call_json(&mut s, "execute_command", json!({"command": "comp.new", "params": {"name": "A", "width": 64, "height": 64}}));
+    call_json(&mut s, "save_project", json!({"path": p(&outside, "free.ecproj")}));
+    call_json(&mut s, "save_project", json!({"path": p(&read, "source.ecproj")}));
+
+    let mut s = server();
+    s.backend().confine(Confinement::new(std::slice::from_ref(&read), std::slice::from_ref(&write)).unwrap());
+    let denied = |s: &mut McpServer, name: &str, args: Value| {
+        let (c, err) = call(s, name, args.clone());
+        assert!(err, "{name} {args} should be refused: {c:?}");
+        c[0]["text"].as_str().unwrap_or_default().to_string()
+    };
+    // Reading: inside a read root, not outside.
+    call_json(&mut s, "open_project", json!({"path": p(&read, "source.ecproj")}));
+    let msg = denied(&mut s, "open_project", json!({"path": p(&outside, "free.ecproj")}));
+    assert!(msg.contains("outside the automation roots"), "{msg}");
+    // Writing: inside a write root only; not into a read root, not relative, not with `..`.
+    call_json(&mut s, "save_project", json!({"path": p(&write, "saved.ecproj")}));
+    assert!(write.join("saved.ecproj").is_file());
+    denied(&mut s, "save_project", json!({"path": p(&read, "copy.ecproj")}));
+    denied(&mut s, "save_project", json!({"path": "relative.ecproj"}));
+    denied(&mut s, "save_project", json!({"path": p(&write, "../elsewhere/up.ecproj")}));
+    denied(&mut s, "execute_command", json!({"command": "comp.saveFrameAs", "params": {"path": p(&outside, "f.png")}}));
+    // Any other absolute path a command is given.
+    denied(&mut s, "execute_command", json!({"command": "renderQueue.add", "params": {"output": p(&outside, "movie.mp4")}}));
+    // A batch step.
+    let steps = json!([{"command": "comp.new", "params": {"name": "B"}}, {"command": "file.saveAs", "params": {"path": p(&outside, "b.ecproj")}}]);
+    denied(&mut s, "batch", json!({"steps": steps}));
+    let steps = json!([{"command": "file.saveAs", "params": {"path": "$1.path"}}]);
+    denied(&mut s, "batch", json!({"steps": steps}));
+    // Save (and Increment and Save) write the open project's own file: it must be writable.
+    call_json(&mut s, "open_project", json!({"path": p(&read, "source.ecproj")}));
+    denied(&mut s, "save_project", json!({}));
+    denied(&mut s, "execute_command", json!({"command": "file.incrementAndSave"}));
+    // Rendering the queue writes its items' outputs (by default beside the project).
+    call_json(&mut s, "execute_command", json!({"command": "renderQueue.add", "params": {"comp": "A"}}));
+    let queue = call_json(&mut s, "execute_command", json!({"command": "renderQueue.list"}));
+    assert!(queue["items"][0]["outputPath"].as_str().is_some_and(|o| o.starts_with(&*read.to_string_lossy())), "{queue}");
+    let msg = denied(&mut s, "execute_command", json!({"command": "renderQueue.render"}));
+    assert!(msg.contains("cannot write"), "{msg}");
+    call_json(&mut s, "open_project", json!({"path": p(&write, "saved.ecproj")}));
+    call_json(&mut s, "save_project", json!({}));
+    // Through a symbolic link out of a root.
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&outside, write.join("link")).unwrap();
+        denied(&mut s, "save_project", json!({"path": p(&write.join("link"), "escaped.ecproj")}));
+        assert!(!outside.join("escaped.ecproj").exists());
+    }
+    // Scripts can read and write anything: refused.
+    denied(&mut s, "run_script", json!({"code": "1 + 1"}));
+    denied(&mut s, "execute_command", json!({"command": "file.runScript", "params": {"path": p(&read, "x.jsx")}}));
+    // Writes to the files the agent named: none outside.
+    assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1, "only the unconfined save");
+    let _ = std::fs::remove_dir_all(&base);
 }
