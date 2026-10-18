@@ -72,6 +72,17 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let mut y = top;
     let mut actions: Actions = vec![];
 
+    // Several layers selected: "(3) Selected Objects", as in After Effects. The rows show the
+    // first layer; the stopwatch, keyframe button and value edits apply to all of them (#355).
+    let selected = app.session.state.selected_layers.iter().filter(|id| comp.layer(**id).is_some()).count();
+    if selected > 1 {
+        let n = selected.to_string();
+        let label = crate::i18n::tr_args("({}) Selected Objects", &[&n]);
+        p.text(pos2(x0, y + ROW_H / 2.0), Align2::LEFT_CENTER, &label, Tokens::semibold(12.0), t.text);
+        app.auto.add("properties.selectedObjects", Rect::from_min_size(pos2(x0, y), vec2(w, ROW_H)), &label);
+        y += ROW_H + 4.0;
+    }
+
     // ---------------------------------------------------------------- Layer Transform
     if let Some(tr) = layer.transform().cloned() {
         section_header(app, ui, &p, x0, w, y, "Layer Transform", "properties.transform");
@@ -218,7 +229,7 @@ fn transform_row(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter,
                 match what {
                     "prev" => actions.push(("time.go".into(), json!({"to": "prevKey", "prop": uid}))),
                     "next" => actions.push(("time.go".into(), json!({"to": "nextKey", "prop": uid}))),
-                    _ => actions.push(("prop.toggleKey".into(), json!({"layer": lid, "prop": uid}))),
+                    _ => actions.push(("prop.toggleKey".into(), json!({"layer": lid, "prop": uid, "selected": true}))),
                 }
             }
         }
@@ -228,13 +239,29 @@ fn transform_row(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter,
         icons::paint(p, swr, Icon::Stopwatch, if resp.hovered() { t.text } else { t.text_dim });
         app.auto.add(&format!("{base}.stopwatch"), swr, &pr.name);
         if resp.clicked() {
-            actions.push(("prop.toggleAnimation".into(), json!({"layer": lid, "prop": uid})));
+            actions.push(("prop.toggleAnimation".into(), json!({"layer": lid, "prop": uid, "selected": true})));
         }
     }
     p.text(pos2(r.min.x + 42.0, cy), Align2::LEFT_CENTER, &pr.name, Tokens::ui(12.0), t.text);
     let vx = r.min.x + (r.width() * 0.5).max(130.0);
+    let label = Rect::from_min_max(pos2(r.min.x + 42.0, r.min.y), pos2(vx - 20.0, r.max.y));
+    let resp = ui.interact(label, egui::Id::new(("props-label", uid)), Sense::click());
+    app.auto.add(&format!("{base}.label"), label, &pr.name);
+    if resp.double_clicked() {
+        app.ui.timeline.search.clear();
+        app.ui.timeline.scroll_to = Some(crate::state::ScrollTo::Property(uid));
+        if let Err(e) = crate::menus::frontend(app, ui.ctx(), "timeline.revealProps", json!({"props": [{"layer": lid, "prop": uid}]})) {
+            app.ui.status = e;
+        }
+        app.show_panel(PanelKind::Timeline);
+    }
     let merge = format!("props-{uid}");
-    let set = |actions: &mut Actions, v: serde_json::Value| actions.push(("prop.set".into(), json!({"layer": lid, "prop": uid, "value": v, "merge": merge})));
+    // With several layers selected the edit applies to all: a scrub by the same change, a typed
+    // value as it is.
+    let scrub = ui.ctx().dragged_id().is_some() && ui.input(|i| i.pointer.is_decidedly_dragging());
+    let set = |actions: &mut Actions, v: serde_json::Value| {
+        actions.push(("prop.set".into(), json!({"layer": lid, "prop": uid, "value": v, "merge": merge, "selected": true, "offset": scrub})))
+    };
     let value = ectx.value(layer, pr);
     let is_scale = pr.name == "Scale";
     let pct = is_scale || pr.name == "Opacity";
@@ -261,16 +288,18 @@ fn transform_row(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter,
             let c = value.components();
             let n = if pr.shown_dims > 0 && !(layer.is_3d() && c.len() == 3) { pr.shown_dims as usize } else { c.len() };
             let mut x = vx;
-            let link_id = egui::Id::new(("props-scale-link", lid));
-            let linked = is_scale && ui.data(|d| d.get_temp::<bool>(link_id)).unwrap_or(true);
-            if is_scale {
+            // Scale: the chain link (Constrain Proportions, on by default), sharing the
+            // Timeline's per-property state so both panels agree (#956).
+            let linkable = pr.match_id == "scale";
+            let linked = linkable && !app.ui.timeline.unlinked.contains(&uid);
+            if linkable {
                 // Constrain Proportions toggle, left of the values.
                 let lr = Rect::from_center_size(pos2(x - 12.0, cy), vec2(12.0, 12.0));
-                let resp = ui.interact(lr, link_id.with("btn"), Sense::click());
+                let resp = ui.interact(lr, egui::Id::new(("props-link", uid)), Sense::click()).on_hover_text(tr("Constrain Proportions"));
                 icons::paint(p, lr, Icon::Link, if linked { t.accent } else { t.text_faint });
                 app.auto.add(&format!("{base}.constrain"), lr, "Constrain Proportions");
-                if resp.clicked() {
-                    ui.data_mut(|d| d.insert_temp(link_id, !linked));
+                if resp.clicked() && !app.ui.timeline.unlinked.remove(&uid) {
+                    app.ui.timeline.unlinked.insert(uid);
                 }
             }
             for d in 0..n.min(c.len()) {
@@ -279,13 +308,14 @@ fn transform_row(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter,
                 app.auto.add(&format!("{base}.value.{d}"), vr, &pr.name);
                 if let Some(nv) = nv {
                     let mut nc = c.clone();
-                    if linked && c[d].abs() > 1e-9 {
-                        let k = nv / c[d];
-                        for v in nc.iter_mut().take(n) {
-                            *v *= k;
+                    // Alt edits one value of a linked pair, as in the Timeline.
+                    let shown = if linked && !ui.input(|i| i.modifiers.alt && !widgets::proportional_scrub(i.modifiers)) { n.min(c.len()) } else { 1 };
+                    let from = if shown == 1 { d } else { 0 };
+                    for (e, v) in widgets::constrained(c.get(from..from + shown).unwrap_or_default(), d - from, nv).into_iter().enumerate() {
+                        if let Some(slot) = nc.get_mut(from + e) {
+                            *slot = v;
                         }
                     }
-                    nc[d] = nv;
                     set(actions, json!(nc));
                 }
                 x = vr.max.x + 10.0;
@@ -395,7 +425,7 @@ fn text_section(
         }
         app.auto.add(&format!("properties.text.{key}"), sw, label);
         let mut rgb = [c[0], c[1], c[2]];
-        if crate::header::color_popup(ui, pop, sw.left_bottom(), &mut rgb) {
+        if crate::widgets::color_popup(ui, pop, sw.left_bottom(), &mut rgb) {
             set(actions, json!({key: [rgb[0], rgb[1], rgb[2]], "merge": format!("props-text-{key}")}));
         }
         p.text(pos2(sw.max.x + 8.0, sw.center().y), Align2::LEFT_CENTER, label, Tokens::ui(12.0), t.text);

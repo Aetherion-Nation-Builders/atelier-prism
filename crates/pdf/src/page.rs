@@ -313,11 +313,9 @@ impl<'a> Interp<'a> {
                     self.path.curve_to(Point::new(n(0), n(1)), p, p);
                     self.cur = Some(p);
                 }
-                "h" => {
-                    if self.cur.is_some() {
-                        self.path.close_path();
-                        self.cur = self.start;
-                    }
+                "h" if self.cur.is_some() => {
+                    self.path.close_path();
+                    self.cur = self.start;
                 }
                 "re" => {
                     let (x, y, w, h) = (n(0), n(1), n(2), n(3));
@@ -517,7 +515,7 @@ impl<'a> Interp<'a> {
                 && (p + 2 == data.len() || crate::object::is_white(data[p + 2]))
         };
         let end = match crate::image::inline_len(self.file, &d, Some(res)) {
-            Some(len) => (start + len).min(data.len()),
+            Some(len) => start.saturating_add(len).min(data.len()),
             None => {
                 let mut p = start;
                 while p + 1 < data.len() && !is_ei(p) {
