@@ -101,7 +101,7 @@ fn page_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, page: &Page, cur: &Value
             Item::Setting { key, label, kind, live } => {
                 let v = get(key);
                 let id = format!("settings.{key}");
-                let tip = (!live).then(|| tr("Stored, but not used by EffectCraft yet"));
+                let tip = (!live).then(|| tr("Stored, but not used by Atelier Prism yet"));
                 let mut resp: Option<egui::Response> = None;
                 match kind {
                     Kind::Bool => {

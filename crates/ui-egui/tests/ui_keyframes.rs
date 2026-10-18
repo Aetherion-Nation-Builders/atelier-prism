@@ -190,7 +190,7 @@ fn copy_and_paste_key_subsets_across_position_rotation_and_scale() {
             assert_eq!(h.state().session.state.selected_props.len(), 3);
             h.input_mut().events.push(Event::Copy);
             h.step();
-            let note = format!("EffectCraft: {count} keyframes");
+            let note = format!("Atelier Prism: {count} keyframes");
             assert!(h.output().platform_output.commands.iter().any(|command| matches!(command, egui::OutputCommand::CopyText(text) if text == &note)));
             h.state_mut().session.set_time(effectcraft_engine::time::Tick::from_seconds_f64(2.0));
             let undo_steps = h.state().session.history.undo.len();
