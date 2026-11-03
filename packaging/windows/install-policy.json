@@ -1,6 +1,8 @@
 {
   "id": "effectcraft",
   "name": "EffectCraft",
+  "suiteFolder": "Atelier",
+  "installFolder": "Atelier Prism",
   "upgradeCode": "AACA8593-C6ED-40A8-BA6C-CB325D8529F9",
   "sources": [
     "effectcraft.wxs",

@@ -585,7 +585,7 @@ mod tests {
         }
         let mut translated = vec![];
         labels(&build(&app).menus, &mut translated);
-        assert_eq!(translated, ["Tjänster", "Dölj EffectCraft", "Göm övriga", "Visa alla"]);
+        assert_eq!(translated, ["Tjänster", "Dölj Atelier Prism", "Göm övriga", "Visa alla"]);
     }
 
     #[test]
@@ -627,7 +627,7 @@ mod tests {
         }
         let mut translated = vec![];
         labels(&build(&app).menus, &mut translated);
-        assert_eq!(translated, ["Usługi", "Ukryj EffectCraft", "Ukryj pozostałe", "Pokaż wszystko"]);
+        assert_eq!(translated, ["Usługi", "Ukryj Atelier Prism", "Ukryj pozostałe", "Pokaż wszystko"]);
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
         }
         let mut translated = vec![];
         labels(&build(&app).menus, &mut translated);
-        assert_eq!(translated, ["სერვისები", "EffectCraft-ის დამალვა", "სხვების დამალვა", "ყველას ჩვენება"]);
+        assert_eq!(translated, ["სერვისები", "Atelier Prism-ის დამალვა", "სხვების დამალვა", "ყველას ჩვენება"]);
     }
 
     #[test]
