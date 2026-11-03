@@ -190,8 +190,8 @@ const JAPANESE: &[(&str, &str)] = &[
     ("360 View Orientation", "360度ビューの方向"),
     ("3:2 Pulldown: {}", "3:2プルダウン：{}"),
     (
-        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on Atelier Prism.",
-        "モーショングラフィックスとビジュアルエフェクト向けの、クリーンルーム方式で開発されたオープンソースのコンポジットソフトウェアです。macOS、Windows、Linuxでネイティブに動作し、ブラウザーでも使えます。NationのクリエイティブスイートAtelierの一員で、Atelier Prismをもとに作られています。",
+        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on EffectCraft.",
+        "モーショングラフィックスとビジュアルエフェクト向けの、クリーンルーム方式で開発されたオープンソースのコンポジットソフトウェアです。macOS、Windows、Linuxでネイティブに動作し、ブラウザーでも使えます。NationのクリエイティブスイートAtelierの一員で、EffectCraftをもとに作られています。",
     ),
     ("About Atelier Prism", "Atelier Prismについて"),
     ("About...", "情報..."),
@@ -1317,8 +1317,8 @@ const SIMPLIFIED_CHINESE: &[(&str, &str)] = &[
     ("360 View Orientation", "360 视图方向"),
     ("3:2 Pulldown: {}", "3:2 折叠：{}"),
     (
-        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on Atelier Prism.",
-        "一款从零编写、开源的动态图形与视觉效果合成软件：原生支持 macOS、Windows 和 Linux，也可在浏览器中运行。属于 Nation 的创意套件 Atelier，基于 Atelier Prism 构建。",
+        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on EffectCraft.",
+        "一款从零编写、开源的动态图形与视觉效果合成软件：原生支持 macOS、Windows 和 Linux，也可在浏览器中运行。属于 Nation 的创意套件 Atelier，基于 EffectCraft 构建。",
     ),
     ("About Atelier Prism", "关于 Atelier Prism"),
     ("About...", "关于..."),
@@ -3680,8 +3680,8 @@ const TRADITIONAL_CHINESE: &[(&str, &str)] = &[
     ("360 View Orientation", "360 檢視方向"),
     ("3:2 Pulldown: {}", "3:2 摺疊：{}"),
     (
-        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on Atelier Prism.",
-        "一款從零編寫、開源的動態圖形與視覺效果合成軟件：原生支援 macOS、Windows 和 Linux，也可在瀏覽器中執行。屬於 Nation 的創意套件 Atelier，以 Atelier Prism 為基礎打造。",
+        "A clean-room, open-source compositor for motion graphics and visual effects: native on macOS, Windows and Linux, and in the browser. Part of Atelier, the Nation's creative suite, built on EffectCraft.",
+        "一款從零編寫、開源的動態圖形與視覺效果合成軟件：原生支援 macOS、Windows 和 Linux，也可在瀏覽器中執行。屬於 Nation 的創意套件 Atelier，以 EffectCraft 為基礎打造。",
     ),
     ("About Atelier Prism", "關於 Atelier Prism"),
     ("About...", "關於..."),
