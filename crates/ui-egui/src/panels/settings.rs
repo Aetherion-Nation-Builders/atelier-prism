@@ -277,9 +277,9 @@ pub(crate) fn disk_cache_limit_lines(max: u64, limit: u64, reserve: Option<u64>,
     let mut lines = vec![tr_args("Disk cache limit in effect: {} MB", &[&(limit.min(max) >> 20)])];
     if limit < max {
         lines.push(match reserve {
-            Some(r) => tr_args("Limited by free disk space: EffectCraft keeps {} GB of this disk free.", &[&format!("{:.1}", r as f64 / GB)]),
+            Some(r) => tr_args("Limited by free disk space: Atelier Prism keeps {} GB of this disk free.", &[&format!("{:.1}", r as f64 / GB)]),
             None => tr_args(
-                "Limited by free disk space: EffectCraft keeps 5% of the disk free (at least {} GB, at most {} GB).",
+                "Limited by free disk space: Atelier Prism keeps 5% of the disk free (at least {} GB, at most {} GB).",
                 &[&(MIN_DISK_RESERVE >> 30), &(MAX_DISK_RESERVE >> 30)],
             ),
         });
@@ -704,10 +704,10 @@ fn library_card_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, t: &Tokens, p: &
                 ui.label(RichText::new(v).color(t.text_dim));
             }
             let state = match (&installed, restart, update) {
-                (_, true, _) => tr("Restart EffectCraft to finish").to_string(),
+                (_, true, _) => tr("Restart Atelier Prism to finish").to_string(),
                 (Some(v), _, true) => tr_args("Installed {}: update available", &[v]),
                 (Some(v), _, _) => tr_args("Installed {}", &[v]),
-                (None, _, _) if newer_app && p["latest"].is_null() => tr("Needs a newer EffectCraft").to_string(),
+                (None, _, _) if newer_app && p["latest"].is_null() => tr("Needs a newer Atelier Prism").to_string(),
                 _ => String::new(),
             };
             ui.label(RichText::new(state).color(if installed.is_some() { t.accent } else { t.text_dim }));
@@ -1308,19 +1308,19 @@ mod tests {
         assert_eq!(shown(&mut app).unwrap(), "limitMb=0 maxMb=20480 reserveMb=10240 spaceLimited=true writes=false");
         assert_eq!(
             text(),
-            "Disk cache limit in effect: 0 MB Limited by free disk space: EffectCraft keeps 10.0 GB of this disk free. No room left: nothing is written to the disk cache until disk space is freed."
+            "Disk cache limit in effect: 0 MB Limited by free disk space: Atelier Prism keeps 10.0 GB of this disk free. No room left: nothing is written to the disk cache until disk space is freed."
         );
         // 12 GB free: 2 GB for the cache.
         dc.set_disk_space(Some((4096 * GB, 12 * GB)));
         assert_eq!(shown(&mut app).unwrap(), "limitMb=2048 maxMb=20480 reserveMb=10240 spaceLimited=true writes=true");
-        assert_eq!(text(), "Disk cache limit in effect: 2048 MB Limited by free disk space: EffectCraft keeps 10.0 GB of this disk free.");
+        assert_eq!(text(), "Disk cache limit in effect: 2048 MB Limited by free disk space: Atelier Prism keeps 10.0 GB of this disk free.");
         // A 100 GB disk keeps 5 GB.
         dc.set_disk_space(Some((100 * GB, 6 * GB)));
         assert_eq!(shown(&mut app).unwrap(), "limitMb=1024 maxMb=20480 reserveMb=5120 spaceLimited=true writes=true");
         // Without the disk's size, the rule from the constants.
         assert_eq!(
             disk_cache_limit_lines(20 * GB, GB, None, true)[1],
-            "Limited by free disk space: EffectCraft keeps 5% of the disk free (at least 2 GB, at most 10 GB)."
+            "Limited by free disk space: Atelier Prism keeps 5% of the disk free (at least 2 GB, at most 10 GB)."
         );
         // No disk cache: no line.
         app.session.disk_cache = None;
