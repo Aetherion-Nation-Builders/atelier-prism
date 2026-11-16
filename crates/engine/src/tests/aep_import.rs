@@ -178,7 +178,7 @@ fn the_import_menu_groups_the_project_imports() {
             "Multiple Files...",
             "Adobe After Effects Project...",
             "Adobe Premiere Pro Project...",
-            "EffectCraft Project...",
+            "Atelier Prism Project...",
             "Vanishing Point (.vpe)...",
             "Placeholder...",
             "Solid...",
