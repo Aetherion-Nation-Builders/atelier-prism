@@ -32,6 +32,6 @@ jobs:
     uses: storytold/craft-common-actions/.github/workflows/windows-arm64.yml@main
     with:
       app-name: effectcraft
-      app-dir: EffectCraft
-      install-relative-path: Programs/ArtCraft/EffectCraft
+      app-dir: Atelier Prism
+      install-relative-path: Programs/Atelier/Atelier Prism
       install-scope: perUser
