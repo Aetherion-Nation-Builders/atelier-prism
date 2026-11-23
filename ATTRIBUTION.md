@@ -147,3 +147,10 @@ brand files.
 | `assets/brand/atelier-mark.png` | Aetherion Nation | Original work: the Atelier mark (the hidden sun), drawn as shapes | MIT OR Apache-2.0 for the artwork (`LICENSE-MIT`) |
 
 - Appearance theme previews, drawn procedurally from original shapes: `crates/ui-egui/src/panels/settings.rs` (original work, MIT OR Apache-2.0).
+
+## Synthetic test audio
+
+| Asset | Author | Source | Licence |
+|---|---|---|---|
+| `crates/media/tests/fixtures/pce61-ffmpeg.aac-fixture` | Dylan M. Taylor | Original sine waves; reproducible recipe in `crates/media/tests/fixtures/README.md` | MIT OR Apache-2.0 |
+| `crates/media/tests/fixtures/monochrome-av1.mkv` | Terra854 | Original grayscale ramps from `crates/media/tests/fixtures/generate-monochrome-av1.sh` | MIT OR Apache-2.0 |
