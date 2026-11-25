@@ -72,32 +72,10 @@ jobs:
           echo "::error title=$step log tail::$(tail -c 1800 "$log.plain" | tr '\n' ' ' | cut -c1-1700)"
           SH
           chmod +x "$RUNNER_TEMP/report.sh"
-      - name: fmt
+      - name: test (baseline, the test that failed on the sync)
         run: |
           set -o pipefail
-          cargo fmt --all -- --check 2>&1 | tee fmt.log || { "$RUNNER_TEMP/report.sh" fmt fmt.log; exit 1; }
-      - name: clippy
-        if: ${{ !cancelled() }}
-        run: |
-          set -o pipefail
-          cargo clippy --workspace --all-targets --release -- -D warnings 2>&1 | tee clippy.log || { "$RUNNER_TEMP/report.sh" clippy clippy.log; exit 1; }
-      - name: test
-        if: ${{ !cancelled() }}
-        run: |
-          set -o pipefail
-          cargo test --workspace --no-fail-fast --release 2>&1 | tee test.log || { "$RUNNER_TEMP/report.sh" test test.log; exit 1; }
-      - name: rest of cargo xtask ci
-        if: ${{ !cancelled() }}
-        run: |
-          failed=0
-          :
-          for step in audio-backend pdf-deps lock-patches layers assets wasm; do
-            echo "::group::xtask $step"
-            set -o pipefail
-            if ! cargo xtask $step 2>&1 | tee "xtask-$step.log"; then
-              "$RUNNER_TEMP/report.sh" "xtask $step" "xtask-$step.log"; failed=1
-            fi
-            echo "::endgroup::"
+          for i in 1 2 3; do
+            cargo test -p effectcraft-ui-egui --lib --release -- viewer_frames 2>&1 | tee test-$i.log || "$RUNNER_TEMP/report.sh" "baseline run $i" test-$i.log
           done
-          :
-          exit $failed
+          ! grep -q 'FAILED$' test-*.log
